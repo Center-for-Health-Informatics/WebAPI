@@ -1,6 +1,7 @@
 import express from 'express'
 import userMiddleware from './middleware/user.js'
 import errorHandler from './middleware/errors.js'
+import i18nRouter from './routes/i18n.js'
 import infoRouter from './routes/info.js'
 import sourceRouter from './routes/source.js'
 import userRouter from './routes/user.js'
@@ -35,6 +36,7 @@ app.use((req, res, next) => {
 
 app.use(userMiddleware)
 
+app.use('/i18n', i18nRouter)
 app.use('/info', infoRouter)
 app.use('/source', sourceRouter)
 app.use('/vocabulary', vocabularyRouter)
@@ -54,6 +56,7 @@ app.use('/cohortresults', cohortresultsRouter)
 app.use('/:sourceKey/person', personRouter)
 app.use('/', userRouter)
 
+app.use((req, res) => res.status(404).json({ message: `Cannot ${req.method} ${req.path}` }))
 app.use(errorHandler)
 
 export default app
