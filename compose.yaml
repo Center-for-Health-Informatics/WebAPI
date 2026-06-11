@@ -1,0 +1,14 @@
+services:
+  webapi:
+    build: .
+    ports:
+      - "${HTTP_PORT}:${EXPRESS_PORT}"
+    environment:
+      DB_PATH: ${DB_PATH}
+      EXPRESS_PORT: ${EXPRESS_PORT}
+      EXPRESS_HOST: ${EXPRESS_HOST}
+      WEBAPI_AUTH_HEADER: ${WEBAPI_AUTH_HEADER}
+      WEBAPI_SOURCES: ${WEBAPI_SOURCES}
+      WEBAPI_VERSION: ${WEBAPI_VERSION}
+    volumes:
+      - ./data:/data

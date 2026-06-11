@@ -23,10 +23,12 @@ Vocabulary search, concept sets, CDM Results (Achilles), Cohort Results (Heracle
 ### Docker
 
 ```bash
+cp .env.example .env
+# Edit .env — set WEBAPI_SOURCES, HTTP_PORT, EXPRESS_PORT at minimum
 docker compose up
 ```
 
-Edit `docker-compose.yml` to point `WEBAPI_SOURCES` at your SQL Server CDM. Then point Atlas at `http://localhost:8080`.
+`compose.yaml` reads all configuration from `.env`. Docker Compose will error on startup if `.env` is missing or if `HTTP_PORT` / `EXPRESS_PORT` are not set, since they are required for the port mapping.
 
 ### Local development
 
@@ -41,8 +43,8 @@ All configuration is through environment variables. No config files.
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `8080` | HTTP listen port |
-| `HOST` | `0.0.0.0` | HTTP listen address |
+| `EXPRESS_PORT` | `8080` | HTTP listen port |
+| `EXPRESS_HOST` | `0.0.0.0` | HTTP listen address |
 | `DB_PATH` | `/data/webapi.db` | Path to the SQLite database file. The directory must exist. |
 | `WEBAPI_SOURCES` | `[]` | JSON array of CDM source objects (see below) |
 | `WEBAPI_AUTH_HEADER` | `x-forwarded-user` | Request header containing the authenticated username, set by the upstream proxy |
@@ -176,7 +178,7 @@ Three runtime packages:
 | `better-sqlite3` | Synchronous SQLite for application state |
 | `mssql` | SQL Server driver with connection pooling |
 
-Dev: `nodemon` (hot reload), `jest` (tests).
+Dev: `nodemon` (hot reload).
 
 ## SQLite Schema
 

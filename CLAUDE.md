@@ -4,116 +4,107 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OHDSI WebAPI is a Java 8 Spring Boot web application (packaged as a WAR) that provides RESTful services for OHDSI tools, particularly Atlas. It connects to one or more CDM (Common Data Model) databases and a PostgreSQL application database. The app runs at `http://localhost:8080/WebAPI`.
+OHDSI WebAPI is a Node.js drop-in replacement for the original Java OHDSI WebAPI. It exposes the same REST API consumed by Atlas, runs at `http://localhost:8080`, and connects to one or more CDM (SQL Server) databases plus a local SQLite application database.
 
 ## Build & Run
 
-### Local development (PostgreSQL via Docker)
+### Local development
 
 ```bash
-# Start the embedded Postgres container (one-time setup)
-docker create --name postgres-webapi -p 8432:5432 -e POSTGRES_PASSWORD=ohdsi postgres:15.0-alpine
-docker start postgres-webapi
-
-# Build and run (skipping tests)
-mvn clean install spring-boot:run -Dmaven.test.skip=true -P webapi-postgresql -s dev/settings.xml -f pom.xml
+npm install
+npm run dev   # nodemon — restarts on file changes
 ```
 
-The `dev/settings.xml` file configures local PostgreSQL connection properties (localhost:8432, user postgres, password ohdsi) and enables `AtlasRegularSecurity` with a permissive JDBC auth query (any username except `notfound` with password `password` works).
-
-After first login, grant admin rights:
-```sql
-INSERT INTO sec_user_role (user_id, role_id, origin) VALUES (1000, 2, 'SYSTEM');
-```
-
-### Build for other databases
-
-Maven profiles control the target database: `-P webapi-postgresql`, `-P webapi-mssql`, `-P webapi-oracle`, `-P webapi-redshift`, `-P webapi-snowflake`, `-P webapi-bigquery`, `-P webapi-hive`, `-P webapi-impala`, `-P webapi-databricks`, `-P webapi-netezza`, `-P webapi-spark`, `-P webapi-iris`.
-
-### Build without running
+### Production / Docker
 
 ```bash
-mvn clean install -DskipTests
+docker compose up
 ```
+
+Configure CDM sources via the `WEBAPI_SOURCES` environment variable (JSON array — see `compose.yaml` for the schema). The SQLite database is persisted at `DB_PATH` (default `/data/webapi.db`).
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `EXPRESS_PORT` | `8080` | HTTP listen port |
+| `EXPRESS_HOST` | `0.0.0.0` | HTTP listen host |
+| `DB_PATH` | `/data/webapi.db` | SQLite application database path |
+| `WEBAPI_AUTH_HEADER` | `x-forwarded-user` | Request header used to identify the current user |
+| `WEBAPI_VERSION` | `2.15.1` | Version string returned by `/info` |
+| `WEBAPI_SOURCES` | `[]` | JSON array of CDM source objects |
+
+The service trusts whatever value the auth header contains — it is designed to sit behind an authenticating proxy. Set `WEBAPI_AUTH_HEADER` to match whatever your proxy injects.
 
 ## Testing
 
-Tests use an embedded PostgreSQL (via `io.zonky.test`) — not H2 — because H2 lacks window functions, `md5`, and other features. The platform-specific Zonky binary is auto-selected by Maven OS activation profiles.
-
 ```bash
-# Run all tests (unit + integration)
-mvn clean test
-
-# Run unit tests only (excludes *IT.java)
-mvn clean test -DskipITtests=true
-
-# Run integration tests only
-mvn clean test -DskipUnitTests=true
-
-# Run a single test class
-mvn clean test -Dtest=CohortDefinitionServiceTest
-
-# Run a single integration test
-mvn clean verify -Dit.test=SecurityIT -DskipUnitTests=true
+npm test   # node --test (Node built-in runner)
 ```
 
-Unit tests extend `AbstractDatabaseTest`, which spins up a singleton embedded Postgres via `PostgresSingletonRule` and loads test data using DBUnit. Test properties are in `src/test/resources/application-test.properties`.
-
-Integration tests are named `*IT.java` and run via `maven-failsafe-plugin`.
+No test files exist yet. New tests belong alongside the code they cover or in a `test/` directory, using the Node built-in `node:test` module.
 
 ## Architecture
 
-### Framework stack
+### Stack
 
-- **Spring Boot 1.5** with embedded Tomcat; deployed as WAR
-- **JAX-RS (Jersey 2.14)** for REST endpoints — services use `@Path`, `@GET`, `@POST`, etc. (not Spring MVC `@RestController`)
-- **Spring Data JPA + Hibernate** for persistence against the WebAPI application database (PostgreSQL in dev; SQL Server in prod defaults)
-- **Spring Batch** for long-running analysis jobs (cohort generation, characterization, estimation, prediction, incidence rates)
-- **Apache Shiro** for authentication/authorization
-- **Flyway** for schema migrations (`src/main/resources/db/migration/{postgresql,sqlserver,oracle}/`)
+- **Node.js** (ESM, `"type": "module"`) with **Express 5**
+- **SQLite** (`better-sqlite3`) — synchronous, embedded application database
+- **mssql** — one connection pool per CDM source (SQL Server)
+- No build step; `node src/server.js` runs directly
 
-### Data model
+### Entry points
 
-There are two distinct database tiers:
+| File | Role |
+|---|---|
+| [src/server.js](src/server.js) | Process entry — runs migrations, connects sources, starts HTTP |
+| [src/config.js](src/config.js) | Reads env vars into a frozen config object |
+| [src/db.js](src/db.js) | Opens SQLite, runs pending migrations from `migrations/` |
+| [src/sources.js](src/sources.js) | Opens mssql pools for each `WEBAPI_SOURCES` entry |
+| [src/app.js](src/app.js) | Express app — CORS, user middleware, route mounting |
 
-1. **WebAPI application database** — stores definitions, jobs, users, security, results metadata. Entities extend `CommonEntity<T>` (`src/main/java/org/ohdsi/webapi/model/CommonEntity.java`), which provides audit fields (createdBy, modifiedBy, dates). JPA repositories use Spring Data.
+### Database tiers
 
-2. **CDM source databases** — patient-level OMOP CDM data. Connections are registered as `Source` entities, each with `SourceDaimon` records mapping daimon types (`CDM`, `Vocabulary`, `Results`, `Temp`, `CEM`, `CEMResults`) to schema qualifiers. SQL targeting CDM sources goes through `SqlRender`/`SqlTranslate` (OHDSI's cross-dialect SQL library) to be rendered and translated per source dialect.
+**Application database (SQLite)** — stores cohort definitions, concept sets, analyses, tags, notifications, jobs. Migrations live in `migrations/` as numbered SQL files (`001_initial.sql`, `002_…`, …). `src/db.js` applies them in order at startup, tracking applied files in a `_migrations` table.
 
-### Source/Daimon pattern
+**CDM source databases (SQL Server)** — patient-level OMOP CDM data. Each source is configured via `WEBAPI_SOURCES` with `cdmSchema`, `vocabSchema`, `resultsSchema`, and `tempSchema` fields. Connection pools are created at startup in `src/sources.js`.
 
-All multi-source SQL uses `SourceAwareSqlRender` (`src/main/java/org/ohdsi/webapi/sqlrender/SourceAwareSqlRender.java`) to inject CDM, Results, Vocabulary, and Temp schema qualifiers. Services look up sources via `SourceRepository` and pass the resolved `Source` to query builders.
+### SQL templating
 
-### Service layer conventions
+[src/sqlrender.js](src/sqlrender.js) provides two helpers:
 
-- Services that need database access extend `AbstractDaoService` (which extends `AbstractAdminService`), giving them access to `SourceRepository`, `UserRepository`, `PermissionService`, Spring's `ConversionService`, etc.
-- Analysis execution services (`CcServiceImpl`, `PredictionServiceImpl`, `EstimationServiceImpl`, `IrCalculationService`) extend `AnalysisExecutionSupport`, which manages Spring Batch job launching.
-- Long-running jobs are Spring Batch jobs composed of `Tasklet` steps. Each analysis type defines its own tasklets (e.g., `GenerateCohortTasklet`, `GenerateCohortCharacterizationTasklet`).
-- REST controllers are in the same package as their domain (e.g., `cohortcharacterization/CcController.java`) or in `service/` (legacy).
+- `loadSql(relativePath)` — reads a file from `src/sql/`
+- `renderSql(sql, source, extraParams)` — substitutes `@param` tokens with schema qualifiers and any extra values
 
-### Security
+Schema names are interpolated directly (they are SQL identifiers, not data). User-supplied values must be bound via mssql parameters, not `renderSql`.
 
-Security is configured via the `security.provider` property. Options: `DisabledSecurity` (no auth), `AtlasRegularSecurity` (JDBC/LDAP/OAuth/SAML), `AtlasGoogleSecurity`. The active provider is wired as the `Security` bean. Shiro filter chains are built by `FilterChainBuilder`; authentication realms live in `shiro/realms/`. Permissions are managed through `PermissionManager` and enforced via Shiro annotations and `PermissionService`.
+SQL templates live in `src/sql/` organised by domain (`vocabulary/`, `cohortresults/`, `cdmresults/`, `person/`).
 
-### Package structure by feature
+### Routes
 
-Each analytical domain (`cohortdefinition`, `cohortcharacterization`, `ircalc`, `estimation`, `prediction`, `pathway`) follows a consistent pattern:
-- `domain/` — JPA entities
-- `dto/` — data transfer objects
-- `converter/` or `converter.java` — Spring `Converter` implementations for domain↔DTO mapping
-- `repository/` — Spring Data repositories
-- `*Service.java` / `*ServiceImpl.java` — business logic
-- `*Controller.java` — JAX-RS REST endpoint
+Each domain has a file in `src/routes/`. Routes are plain Express routers mounted in `src/app.js`:
 
-### Cross-cutting concerns
+| Mount path | File |
+|---|---|
+| `/info` | [src/routes/info.js](src/routes/info.js) |
+| `/source` | [src/routes/source.js](src/routes/source.js) |
+| `/vocabulary` | [src/routes/vocabulary.js](src/routes/vocabulary.js) |
+| `/conceptset` | [src/routes/conceptset.js](src/routes/conceptset.js) |
+| `/cohortdefinition` | [src/routes/cohortdefinition.js](src/routes/cohortdefinition.js) |
+| `/cdmresults` | [src/routes/cdmresults.js](src/routes/cdmresults.js) |
+| `/cohortresults` | [src/routes/cohortresults.js](src/routes/cohortresults.js) |
+| `/ir` | [src/routes/ir.js](src/routes/ir.js) |
+| `/cohort-characterization` | [src/routes/cohortcharacterization.js](src/routes/cohortcharacterization.js) |
+| `/pathway-analysis` | [src/routes/pathway.js](src/routes/pathway.js) |
+| `/estimation` | [src/routes/estimation.js](src/routes/estimation.js) |
+| `/prediction` | [src/routes/prediction.js](src/routes/prediction.js) |
+| `/tag` | [src/routes/tags.js](src/routes/tags.js) |
+| `/job` | [src/routes/job.js](src/routes/job.js) |
+| `/notifications` | [src/routes/notifications.js](src/routes/notifications.js) |
+| `/:sourceKey/person` | [src/routes/person.js](src/routes/person.js) |
+| `/` | [src/routes/user.js](src/routes/user.js) |
 
-- **Versioning** (`versioning/`) — entities support snapshot versioning; `VersionRepository` tracks historical versions.
-- **Tagging** (`tag/`) — entities can be tagged; `HasTags<T>` interface marks taggable services.
-- **Audit trail** (`audittrail/`) — configurable audit logging via Spring events.
-- **Check/validation** (`check/`) — a validation framework with builders, checkers, and validators per domain type.
-- **Sensitive info** (`common/sensitiveinfo/`) — role-based redaction of sensitive analysis output fields.
-- **Generation cache** (`generationcache/`) — caches and reuses generation results across analyses.
+### Middleware
 
-### Configuration
-
-All runtime properties flow through Maven profile properties → `application.properties` via `${placeholder}` substitution. There is no separate `application.yml`. Additional Spring profiles (`application-shiny.properties`, `application-test.properties`) supplement the base properties file.
+- **[src/middleware/user.js](src/middleware/user.js)** — reads `WEBAPI_AUTH_HEADER` from the request and attaches `req.user = { login, name }`. Falls back to `"anonymous"`.
+- **[src/middleware/errors.js](src/middleware/errors.js)** — Express error handler; maps `err.status` to HTTP status codes.

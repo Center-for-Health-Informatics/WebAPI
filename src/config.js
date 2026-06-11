@@ -5,8 +5,8 @@ if (sources.length === 0) {
 }
 
 const config = Object.freeze({
-  port: parseInt(process.env.PORT || '8080', 10),
-  host: process.env.HOST || '0.0.0.0',
+  port: parseInt(process.env.EXPRESS_PORT || '80', 10),
+  host: process.env.EXPRESS_HOST || '0.0.0.0',
   dbPath: process.env.DB_PATH || '/data/webapi.db',
   authHeader: process.env.WEBAPI_AUTH_HEADER || 'x-forwarded-user',
   version: process.env.WEBAPI_VERSION || '2.15.1',
