@@ -1,5 +1,6 @@
 import sql from 'mssql'
 import config from './config.js'
+import { loadSql, renderSql } from './sqlrender.js'
 
 // One mssql connection pool per source, keyed by sourceKey
 const pools = new Map()
@@ -25,6 +26,26 @@ function buildPoolConfig (source) {
   }
 }
 
+// Create concept_hierarchy if missing and populate it if empty.
+// Runs in the background after pool connects — does not block startup.
+async function initConceptHierarchy (pool, source) {
+  if (!source.resultsSchema || !source.vocabSchema) return
+
+  const createSql = renderSql(loadSql('ddl/concept_hierarchy_create.sql'), source)
+  await pool.request().query(createSql)
+
+  const countSql = renderSql('SELECT COUNT(*) AS cnt FROM @results_database_schema.concept_hierarchy', source)
+  const { recordset } = await pool.request().query(countSql)
+  if (recordset[0].cnt > 0) return
+
+  console.log(`[${source.sourceKey}] Populating concept_hierarchy (this may take several minutes)...`)
+  const populateSql = renderSql(loadSql('ddl/concept_hierarchy_populate.sql'), source)
+  const req = pool.request()
+  req.timeout = 30 * 60 * 1000 // 30 minutes — vocab joins can be slow
+  await req.query(populateSql)
+  console.log(`[${source.sourceKey}] concept_hierarchy populated`)
+}
+
 // Eagerly open all pools on startup
 export async function initSources () {
   for (const source of config.sources) {
@@ -34,6 +55,9 @@ export async function initSources () {
         : await new sql.ConnectionPool(buildPoolConfig(source)).connect()
       pools.set(source.sourceKey, pool)
       console.log(`Connected to source: ${source.sourceKey}`)
+      initConceptHierarchy(pool, source).catch(err =>
+        console.error(`[${source.sourceKey}] concept_hierarchy init failed: ${err.message}`)
+      )
     } catch (err) {
       console.error(`Failed to connect to source ${source.sourceKey}: ${err.message}`)
     }
