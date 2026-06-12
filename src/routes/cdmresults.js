@@ -208,7 +208,15 @@ router.get('/:sourceKey/:domain', async (req, res, next) => {
     const rendered = renderSql(rawSql, source)
     const result = await pool.request().query(rendered)
     res.json(result.recordset.map(normRow))
-  } catch (err) { next(err) }
+  } catch (err) {
+    // SQL error 208 = "Invalid object name" — results schema tables (e.g. concept_hierarchy)
+    // may not exist if Achilles hasn't been run. Return empty rather than 500.
+    if (err.number === 208) {
+      console.warn(`[cdmresults] ${req.params.sourceKey}/${domain}: ${err.message}`)
+      return res.json([])
+    }
+    next(err)
+  }
 })
 
 // --- drilldown ---
