@@ -38,12 +38,20 @@ async function initConceptHierarchy (pool, source) {
   const { recordset } = await pool.request().query(countSql)
   if (recordset[0].cnt > 0) return
 
-  console.log(`[${source.sourceKey}] Populating concept_hierarchy (this may take several minutes)...`)
-  const populateSql = renderSql(loadSql('ddl/concept_hierarchy_populate.sql'), source)
-  const req = pool.request()
-  req.timeout = 30 * 60 * 1000 // 30 minutes — vocab joins can be slow
-  await req.query(populateSql)
-  console.log(`[${source.sourceKey}] concept_hierarchy populated`)
+  // requestTimeout is baked into the tedious connection, not settable per-request,
+  // so use a dedicated pool with no timeout for the long-running vocab joins.
+  const ddlCfg = source.connectionString
+    ? { connectionString: source.connectionString, requestTimeout: 0 }
+    : { ...buildPoolConfig(source), requestTimeout: 0 }
+  const ddlPool = await new sql.ConnectionPool(ddlCfg).connect()
+  try {
+    console.log(`[${source.sourceKey}] Populating concept_hierarchy (this may take several minutes)...`)
+    const populateSql = renderSql(loadSql('ddl/concept_hierarchy_populate.sql'), source)
+    await ddlPool.request().query(populateSql)
+    console.log(`[${source.sourceKey}] concept_hierarchy populated`)
+  } finally {
+    await ddlPool.close()
+  }
 }
 
 // Eagerly open all pools on startup
