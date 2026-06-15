@@ -60,7 +60,7 @@ router.post('/sql', async (req, res, next) => {
       resultSchema: source.resultsSchema,
       vocabularySchema: source.vocabSchema
     })
-    res.type('text/plain').send(sql)
+    res.json({ templateSql: sql })
   } catch (err) { next(err) }
 })
 
