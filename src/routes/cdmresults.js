@@ -165,7 +165,10 @@ router.post('/:sourceKey/conceptRecordCount', async (req, res, next) => {
       value: [r.RECORD_COUNT || 0, r.DESCENDANT_RECORD_COUNT || 0]
     }))
     res.json(response)
-  } catch (err) { next(err) }
+  } catch (err) {
+    if (err.number === 208) return res.json([])
+    next(err)
+  }
 })
 
 // --- treemap ---

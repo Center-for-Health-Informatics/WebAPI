@@ -27,6 +27,37 @@ function buildPoolConfig (source) {
   }
 }
 
+// Create achilles_result_concept_count if missing and populate it from achilles_results.
+// Runs in the background after pool connects — does not block startup.
+async function initConceptCount (pool, source) {
+  if (!source.resultsSchema || !source.vocabSchema) return
+
+  const createSql = renderSql(loadSql('ddl/concept_count_create.sql'), source)
+  await pool.request().query(createSql)
+
+  const countSql = renderSql('SELECT COUNT(*) AS cnt FROM @results_database_schema.achilles_result_concept_count', source)
+  try {
+    const { recordset } = await pool.request().query(countSql)
+    if (recordset[0].cnt > 0) return
+  } catch (err) {
+    if (err.number === 208) return  // achilles_results doesn't exist yet
+    throw err
+  }
+
+  const ddlCfg = source.connectionString
+    ? { connectionString: source.connectionString, requestTimeout: 0 }
+    : { ...buildPoolConfig(source), requestTimeout: 0 }
+  const ddlPool = await new sql.ConnectionPool(ddlCfg).connect()
+  try {
+    console.log(`[${source.sourceKey}] Populating achilles_result_concept_count...`)
+    const populateSql = renderSql(loadSql('ddl/concept_count_populate.sql'), source)
+    await ddlPool.request().query(populateSql)
+    console.log(`[${source.sourceKey}] achilles_result_concept_count populated`)
+  } finally {
+    await ddlPool.close()
+  }
+}
+
 // Create concept_hierarchy if missing and populate it if empty.
 // Runs in the background after pool connects — does not block startup.
 async function initConceptHierarchy (pool, source) {
@@ -66,6 +97,9 @@ export async function initSources () {
       console.log(`Connected to source: ${source.sourceKey}`)
       initConceptHierarchy(pool, source).catch(err =>
         console.error(`[${source.sourceKey}] concept_hierarchy init failed: ${err.message}`)
+      )
+      initConceptCount(pool, source).catch(err =>
+        console.error(`[${source.sourceKey}] achilles_result_concept_count init failed: ${err.message}`)
       )
     } catch (err) {
       console.error(`Failed to connect to source ${source.sourceKey}: ${err.message}`)
