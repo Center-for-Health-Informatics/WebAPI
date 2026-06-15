@@ -173,22 +173,29 @@ router.get('/:id/copy', (req, res) => {
   res.json(rowToDto(copied, true))
 })
 
-// GET /:id/info (generation status — empty until generation is implemented)
+const STATUS_MAP = { STARTED: 'RUNNING', COMPLETED: 'COMPLETE', CANCELED: 'FAILED' }
+
+// GET /:id/info (generation status)
 router.get('/:id/info', (req, res) => {
   const row = db.prepare('SELECT id FROM cohort_definition WHERE id = ?').get(req.params.id)
   if (!row) return res.status(404).json({ message: 'Cohort definition not found' })
   const infos = db.prepare('SELECT * FROM cohort_generation_info WHERE cohort_definition_id = ?').all(row.id)
-  res.json(infos.map(i => ({
-    id: { cohortDefinitionId: i.cohort_definition_id, sourceId: i.source_key },
-    status: i.status,
-    startTime: i.start_time,
-    executionDuration: i.execution_duration,
-    isValid: Boolean(i.is_valid),
-    isCanceled: Boolean(i.is_canceled),
-    failMessage: i.fail_message || null,
-    personCount: i.person_count,
-    recordCount: i.record_count
-  })))
+  res.json(infos.map(i => {
+    // sourceId must be the integer used by /source (index + 1), not the sourceKey string
+    const srcIdx = config.sources.findIndex(s => s.sourceKey === i.source_key)
+    const sourceId = srcIdx >= 0 ? srcIdx + 1 : 0
+    return {
+      id: { cohortDefinitionId: i.cohort_definition_id, sourceId },
+      status: STATUS_MAP[i.status] ?? i.status,
+      startTime: i.start_time,
+      executionDuration: i.execution_duration,
+      isValid: Boolean(i.is_valid),
+      isCanceled: Boolean(i.is_canceled),
+      failMessage: i.fail_message || null,
+      personCount: i.person_count,
+      recordCount: i.record_count
+    }
+  }))
 })
 
 // GET /:id/generate/:sourceKey → kick off async cohort generation
