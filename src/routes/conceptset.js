@@ -86,6 +86,11 @@ async function buildExpression (conceptSetId, source) {
 
 // --- static routes (must precede /:id) ---
 
+// POST /check — tag/integrity diagnostics; we enforce no tag rules so always clean
+router.post('/check', (_req, res) => {
+  res.json({ warnings: [] })
+})
+
 // GET /exportlist
 router.get('/exportlist', (_req, res) => {
   res.json([])
