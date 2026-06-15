@@ -27,6 +27,7 @@ function rowToDto (row) {
     modifiedBy: toUserRef(row.modified_by),
     modifiedDate: formatDate(row.modified_date),
     tags: [],
+    hasReadAccess: true,
     hasWriteAccess: true
   }
 }
@@ -49,15 +50,21 @@ async function fetchConceptDetails (source, conceptIds) {
      FROM ${source.vocabSchema}.concept
      WHERE CONCEPT_ID IN (${idList})`
   )
+  const SC_CAPTION = { S: 'Standard', C: 'Classification', N: 'Non-Standard' }
+  const IR_CAPTION = { V: 'Valid', D: 'Deleted', U: 'Updated' }
   const map = {}
   for (const row of result.recordset) {
     const d = row.VALID_START_DATE
     const e = row.VALID_END_DATE
+    const sc = row.STANDARD_CONCEPT || 'N'
+    const ir = row.INVALID_REASON || 'V'
     map[row.CONCEPT_ID] = {
       CONCEPT_ID: row.CONCEPT_ID,
       CONCEPT_NAME: row.CONCEPT_NAME,
-      STANDARD_CONCEPT: row.STANDARD_CONCEPT,
-      INVALID_REASON: row.INVALID_REASON,
+      STANDARD_CONCEPT: sc,
+      STANDARD_CONCEPT_CAPTION: SC_CAPTION[sc] || 'Non-Standard',
+      INVALID_REASON: ir,
+      INVALID_REASON_CAPTION: IR_CAPTION[ir] || ir,
       CONCEPT_CODE: row.CONCEPT_CODE,
       CONCEPT_CLASS_ID: row.CONCEPT_CLASS_ID,
       DOMAIN_ID: row.DOMAIN_ID,
@@ -251,6 +258,14 @@ router.get('/:id/version/:version/expression', async (req, res, next) => {
     res.json(JSON.parse(ver.expression))
   } catch (err) { next(err) }
 })
+
+// --- annotation stubs ---
+// Annotations are user notes attached to concept sets; we don't implement the feature
+// but Atlas calls these endpoints and treats a 404 as an error.
+
+router.get('/:id/annotation', (_req, res) => res.json([]))
+router.put('/:id/annotation', (_req, res) => res.json([]))
+router.delete('/:id/annotation/:annotationId', (_req, res) => res.sendStatus(204))
 
 // --- generation info (stub) ---
 

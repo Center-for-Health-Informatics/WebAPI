@@ -31,6 +31,7 @@ function rowToDto (row, includeExpression = false) {
     modifiedBy: toUserRef(row.modified_by),
     modifiedDate: formatDate(row.modified_date),
     tags: [],
+    hasReadAccess: true,
     hasWriteAccess: true
   }
 
@@ -193,7 +194,8 @@ router.get('/:id/info', (req, res) => {
       isCanceled: Boolean(i.is_canceled),
       failMessage: i.fail_message || null,
       personCount: i.person_count,
-      recordCount: i.record_count
+      recordCount: i.record_count,
+      createdBy: null
     }
   }))
 })

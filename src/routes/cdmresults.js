@@ -159,10 +159,9 @@ router.post('/:sourceKey/conceptRecordCount', async (req, res, next) => {
       { resultTableQualifier: source.resultsSchema, conceptIdentifiers: ids.join(',') }
     )
     const result = await pool.request().query(rendered)
-    // Return as [{key: conceptId, value: [recordCount, descendantRecordCount]}, ...]
+    // Atlas CDMResultsAPI expects [{ [conceptId]: [rc, drc, personCount, descendantPersonCount] }, ...]
     const response = result.recordset.map(r => ({
-      key: r.CONCEPT_ID,
-      value: [r.RECORD_COUNT || 0, r.DESCENDANT_RECORD_COUNT || 0]
+      [r.concept_id]: [r.record_count || 0, r.descendant_record_count || 0, 0, 0]
     }))
     res.json(response)
   } catch (err) {
