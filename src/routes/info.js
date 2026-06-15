@@ -15,7 +15,9 @@ router.get('/', (req, res) => {
       atlasRepositoryInfo: { milestoneId: null, releaseTag: null },
       webapiRepositoryInfo: { milestoneId: null, releaseTag: null }
     },
-    configuration: {}
+    configuration: {
+      security: { enabled: false }
+    }
   })
 })
 
