@@ -21,18 +21,20 @@ router.get('/priorityVocabulary', (req, res) => {
   res.json(toSourceInfo(config.sources[idx], idx))
 })
 
-// Priority source for a given daimon type (e.g. ?daimonType=Vocabulary)
+// Priority source per daimon type — returns { CDM: SourceInfo, Vocabulary: SourceInfo, ... }
 router.get('/daimon/priority', (req, res) => {
-  const type = req.query.daimonType
-  const idx = config.sources.findIndex(s =>
-    !type ||
-    (type === 'CDM' && s.cdmSchema) ||
-    (type === 'Vocabulary' && s.vocabSchema) ||
-    (type === 'Results' && s.resultsSchema) ||
-    (type === 'Temp' && s.tempSchema)
-  )
-  if (idx === -1) return res.status(404).json({ message: 'No matching source found' })
-  res.json(toSourceInfo(config.sources[idx], idx))
+  const result = {}
+  const daimonChecks = [
+    ['CDM', s => s.cdmSchema],
+    ['Vocabulary', s => s.vocabSchema],
+    ['Results', s => s.resultsSchema],
+    ['Temp', s => s.tempSchema],
+  ]
+  for (const [type, hasDaimon] of daimonChecks) {
+    const idx = config.sources.findIndex(hasDaimon)
+    if (idx !== -1) result[type] = toSourceInfo(config.sources[idx], idx)
+  }
+  res.json(result)
 })
 
 // Single source by key
