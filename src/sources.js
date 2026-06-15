@@ -86,6 +86,12 @@ async function initConceptHierarchy (pool, source) {
   }
 }
 
+async function initCohortTable (pool, source) {
+  if (!source.resultsSchema) return
+  const createSql = renderSql(loadSql('ddl/cohort_table_create.sql'), source)
+  await pool.request().query(createSql)
+}
+
 // Eagerly open all pools on startup
 export async function initSources () {
   for (const source of config.sources) {
@@ -95,6 +101,9 @@ export async function initSources () {
         : await new sql.ConnectionPool(buildPoolConfig(source)).connect()
       pools.set(source.sourceKey, pool)
       console.log(`Connected to source: ${source.sourceKey}`)
+      initCohortTable(pool, source).catch(err =>
+        console.error(`[${source.sourceKey}] cohort table init failed: ${err.message}`)
+      )
       initConceptHierarchy(pool, source).catch(err =>
         console.error(`[${source.sourceKey}] concept_hierarchy init failed: ${err.message}`)
       )

@@ -1,5 +1,10 @@
 import { Router } from 'express'
+import mssql from 'mssql'
 import db from '../db.js'
+import config from '../config.js'
+import { getPool, getSource } from '../sources.js'
+import { jobToResource } from '../jobResource.js'
+import { generateCohortSql } from '../circe.js'
 
 const router = Router()
 
@@ -39,8 +44,23 @@ function rowToDto (row, includeExpression = false) {
 
 // --- static routes (before /:id) ---
 
-// POST /sql → 501 (CIRCE dependency)
-router.post('/sql', (_req, res) => res.sendStatus(501))
+// POST /sql → generate SQL for display (no execution)
+router.post('/sql', async (req, res, next) => {
+  try {
+    const { expression } = req.body || {}
+    if (!expression) return res.status(400).json({ message: 'expression required' })
+    const source = config.sources[0]
+    if (!source) return res.status(500).json({ message: 'No CDM source configured' })
+    const sql = await generateCohortSql(expression, {
+      cohortId: 0,
+      cdmSchema: source.cdmSchema,
+      targetTable: `${source.resultsSchema}.cohort`,
+      resultSchema: source.resultsSchema,
+      vocabularySchema: source.vocabSchema
+    })
+    res.type('text/plain').send(sql)
+  } catch (err) { next(err) }
+})
 
 // POST /check → return empty warnings (CIRCE validation not implemented)
 router.post('/check', (_req, res) => res.json([]))
@@ -171,8 +191,104 @@ router.get('/:id/info', (req, res) => {
   })))
 })
 
-// GET /:id/generate/:sourceKey → 501 (CIRCE dependency)
-router.get('/:id/generate/:sourceKey', (_req, res) => res.sendStatus(501))
+// GET /:id/generate/:sourceKey → kick off async cohort generation
+router.get('/:id/generate/:sourceKey', async (req, res, next) => {
+  const cohortId = parseInt(req.params.id, 10)
+  const sourceKey = req.params.sourceKey
+
+  const defRow = db.prepare('SELECT id FROM cohort_definition WHERE id = ?').get(cohortId)
+  if (!defRow) return res.status(404).json({ message: 'Cohort definition not found' })
+
+  const detail = db.prepare('SELECT expression FROM cohort_definition_details WHERE id = ?').get(cohortId)
+  if (!detail?.expression) return res.status(400).json({ message: 'Cohort has no expression' })
+
+  let source
+  try { source = getSource(sourceKey) } catch { return res.status(404).json({ message: 'Source not found' }) }
+
+  const now = Date.now()
+  const jobResult = db.prepare(
+    `INSERT INTO job (name, type, status, start_time, params) VALUES (?, ?, 'STARTED', ?, ?)`
+  ).run(
+    `GenerateCohort_${cohortId}_${sourceKey}`,
+    'cohortDefinitionGeneration',
+    now,
+    JSON.stringify({ cohortDefinitionId: cohortId, sourceKey })
+  )
+  const jobId = jobResult.lastInsertRowid
+  const jobRow = db.prepare('SELECT * FROM job WHERE id = ?').get(jobId)
+
+  db.prepare(`
+    INSERT INTO cohort_generation_info
+      (cohort_definition_id, source_key, status, start_time, is_valid, is_canceled)
+    VALUES (?, ?, 'STARTED', ?, 0, 0)
+    ON CONFLICT(cohort_definition_id, source_key) DO UPDATE SET
+      status = 'STARTED', start_time = excluded.start_time, fail_message = NULL,
+      is_canceled = 0, person_count = NULL, record_count = NULL, execution_duration = NULL
+  `).run(cohortId, sourceKey, now)
+
+  res.json(jobToResource(jobRow))
+
+  ;(async () => {
+    const startMs = Date.now()
+    try {
+      const expression = JSON.parse(detail.expression)
+      const targetTable = `${source.resultsSchema}.cohort`
+
+      console.log(`[cohort ${cohortId}@${sourceKey}] Generating SQL...`)
+      const cohortSql = await generateCohortSql(expression, {
+        cohortId,
+        cdmSchema: source.cdmSchema,
+        targetTable,
+        resultSchema: source.resultsSchema,
+        vocabularySchema: source.vocabSchema
+      })
+
+      console.log(`[cohort ${cohortId}@${sourceKey}] Executing...`)
+      const execCfg = source.connectionString
+        ? { connectionString: source.connectionString, requestTimeout: 0 }
+        : {
+            server: source.server, port: source.port || 1433,
+            database: source.database, user: source.username, password: source.password,
+            options: { encrypt: source.encrypt !== false, trustServerCertificate: source.trustServerCertificate || false, enableArithAbort: true },
+            requestTimeout: 0, pool: { max: 1, min: 0, idleTimeoutMillis: 5000 }
+          }
+      const execPool = await new mssql.ConnectionPool(execCfg).connect()
+      try {
+        await execPool.request().query(cohortSql)
+      } finally {
+        await execPool.close()
+      }
+
+      const countResult = await getPool(sourceKey).request().query(
+        `SELECT COUNT(DISTINCT subject_id) AS person_count, COUNT(*) AS record_count
+         FROM ${targetTable} WHERE cohort_definition_id = ${cohortId}`
+      )
+      const { person_count, record_count } = countResult.recordset[0]
+      const duration = Date.now() - startMs
+
+      db.prepare(
+        `UPDATE cohort_generation_info SET status='COMPLETED', execution_duration=?,
+         is_valid=1, person_count=?, record_count=?
+         WHERE cohort_definition_id=? AND source_key=?`
+      ).run(duration, person_count, record_count, cohortId, sourceKey)
+      db.prepare(
+        `UPDATE job SET status='COMPLETED', exit_status='COMPLETED', end_time=? WHERE id=?`
+      ).run(Date.now(), jobId)
+
+      console.log(`[cohort ${cohortId}@${sourceKey}] COMPLETED: ${person_count} persons, ${record_count} records (${duration}ms)`)
+    } catch (err) {
+      const duration = Date.now() - startMs
+      console.error(`[cohort ${cohortId}@${sourceKey}] FAILED: ${err.message}`)
+      db.prepare(
+        `UPDATE cohort_generation_info SET status='FAILED', execution_duration=?, fail_message=?
+         WHERE cohort_definition_id=? AND source_key=?`
+      ).run(duration, err.message, cohortId, sourceKey)
+      db.prepare(
+        `UPDATE job SET status='FAILED', exit_status='FAILED', fail_message=?, end_time=? WHERE id=?`
+      ).run(err.message, Date.now(), jobId)
+    }
+  })()
+})
 
 // GET /:id/cancel/:sourceKey → stub
 router.get('/:id/cancel/:sourceKey', (req, res) => {
