@@ -5,7 +5,7 @@ import app from './app.js'
 
 initSources().then(() => {
   const server = app.listen(config.port, config.host, () => {
-    console.log(`WebAPI listening on http://${config.host}:${config.port}`)
+    console.log(`${config.package.name} v${config.package.version} listening on http://${config.host}:${config.port}`)
   })
   server.on('error', err => { console.error('Server error:', err.message); process.exit(1) })
 })

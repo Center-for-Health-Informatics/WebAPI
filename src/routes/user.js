@@ -9,9 +9,9 @@ router.get('/user/me', (req, res) => {
     id: 1,
     login,
     name,
-    // Grant all permissions — access control is the proxy's responsibility
     permissions: [],
-    permissionIdx: {}
+    // Wildcard grants all permissions; access control is the proxy's responsibility
+    permissionIdx: { '*': ['*'] }
   })
 })
 
