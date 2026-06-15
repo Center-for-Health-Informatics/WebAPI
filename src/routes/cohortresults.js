@@ -14,10 +14,6 @@ const SQL_DIR = join(__dirname, '../sql/cohortresults')
 
 const router = Router()
 
-function normKey (str) {
-  if (!str.includes('_')) return str.charAt(0).toLowerCase() + str.slice(1)
-  return str.toLowerCase().replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase())
-}
 
 function renderSql (sql, source, cohortId, extraParams = {}) {
   const params = {
@@ -36,9 +32,7 @@ function renderSql (sql, source, cohortId, extraParams = {}) {
 
 async function runSql (pool, sql) {
   const result = await pool.request().query(sql)
-  return (result.recordset || []).map(row =>
-    Object.fromEntries(Object.entries(row).map(([k, v]) => [normKey(k), v]))
-  )
+  return result.recordset || []
 }
 
 async function runFile (source, relPath, cohortId, extraParams = {}) {
@@ -83,7 +77,7 @@ router.get('/:sourceKey/:id/analyses', async (req, res, next) => {
       src, req.params.id
     )
     const rows = await runSql(src.pool, sql)
-    res.json(rows.map(r => r.analysisId ?? r.analysis_id))
+    res.json(rows.map(r => r.ANALYSIS_ID))
   } catch { res.json([]) }
 })
 
@@ -97,7 +91,7 @@ router.get('/:sourceKey/:id/completed', async (req, res, next) => {
       src, req.params.id
     )
     const rows = await runSql(src.pool, sql)
-    res.json(rows.map(r => String(r.analysisId ?? r.analysis_id)))
+    res.json(rows.map(r => String(r.ANALYSIS_ID)))
   } catch { res.json([]) }
 })
 
@@ -262,7 +256,7 @@ router.get('/:sourceKey/:id/distinctPersonCount', async (req, res, next) => {
       src, req.params.id
     )
     const rows = await runSql(src.pool, sql)
-    res.json(rows[0]?.countValue ?? 0)
+    res.json(rows[0]?.COUNT_VALUE ?? 0)
   } catch { res.json(0) }
 })
 

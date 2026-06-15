@@ -12,24 +12,6 @@ const CDM_SQL_DIR = path.join(__dirname, '..', 'sql', 'cdmresults')
 
 // --- helpers ---
 
-// Convert any column name variant (snake_case, UPPER_CASE, camelCase) to camelCase.
-function normKey (str) {
-  if (!str.includes('_')) {
-    // Already camelCase or plain word — lowercase the first letter only.
-    return str.charAt(0).toLowerCase() + str.slice(1)
-  }
-  // snake_case or UPPER_CASE → camelCase
-  return str.toLowerCase().replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase())
-}
-
-function normRow (row) {
-  const out = {}
-  for (const [k, v] of Object.entries(row)) {
-    out[normKey(k)] = v
-  }
-  return out
-}
-
 // Run a single CDM results SQL template against a source.
 async function runReport (sourceKey, relPath, extraParams) {
   const source = getSource(sourceKey)
@@ -37,7 +19,7 @@ async function runReport (sourceKey, relPath, extraParams) {
   const rawSql = loadSql(`cdmresults/${relPath}`)
   const rendered = renderSql(rawSql, source, extraParams || {})
   const result = await pool.request().query(rendered)
-  return result.recordset.map(normRow)
+  return result.recordset
 }
 
 // Run all *.sql files in a directory, returning { filename_without_ext: rows[] }.
@@ -54,7 +36,7 @@ async function runDirectory (sourceKey, relDir, extraParams) {
     const rendered = renderSql(rawSql, source, extraParams || {})
     try {
       const result = await pool.request().query(rendered)
-      out[file.replace('.sql', '')] = result.recordset.map(normRow)
+      out[file.replace('.sql', '')] = result.recordset
     } catch (err) {
       out[file.replace('.sql', '')] = []
     }
@@ -179,11 +161,8 @@ router.post('/:sourceKey/conceptRecordCount', async (req, res, next) => {
     const result = await pool.request().query(rendered)
     // Return as [{key: conceptId, value: [recordCount, descendantRecordCount]}, ...]
     const response = result.recordset.map(r => ({
-      key: r.concept_id || r.CONCEPT_ID,
-      value: [
-        r.record_count !== undefined ? r.record_count : (r.RECORD_COUNT || 0),
-        r.descendant_record_count !== undefined ? r.descendant_record_count : (r.DESCENDANT_RECORD_COUNT || 0)
-      ]
+      key: r.CONCEPT_ID,
+      value: [r.RECORD_COUNT || 0, r.DESCENDANT_RECORD_COUNT || 0]
     }))
     res.json(response)
   } catch (err) { next(err) }
@@ -207,7 +186,7 @@ router.get('/:sourceKey/:domain', async (req, res, next) => {
     const rawSql = loadSql(`cdmresults/report/${domain}/treemap.sql`)
     const rendered = renderSql(rawSql, source)
     const result = await pool.request().query(rendered)
-    res.json(result.recordset.map(normRow))
+    res.json(result.recordset)
   } catch (err) {
     // SQL error 208 = "Invalid object name" — results schema tables (e.g. concept_hierarchy)
     // may not exist if Achilles hasn't been run. Return empty rather than 500.

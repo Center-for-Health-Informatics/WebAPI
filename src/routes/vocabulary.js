@@ -15,26 +15,33 @@ function formatDate (d) {
   return String(d).slice(0, 10)
 }
 
+const STANDARD_CONCEPT_CAPTION = { S: 'Standard', C: 'Classification', N: 'Non-Standard' }
+const INVALID_REASON_CAPTION = { V: 'Valid', D: 'Deleted', U: 'Updated' }
+
 function mapConcept (row) {
+  const sc = row.STANDARD_CONCEPT || 'N'
+  const ir = row.INVALID_REASON || 'V'
   return {
-    conceptId: row.CONCEPT_ID,
-    conceptName: row.CONCEPT_NAME,
-    standardConcept: row.STANDARD_CONCEPT,
-    invalidReason: row.INVALID_REASON,
-    conceptCode: row.CONCEPT_CODE,
-    conceptClassId: row.CONCEPT_CLASS_ID,
-    domainId: row.DOMAIN_ID,
-    vocabularyId: row.VOCABULARY_ID,
-    validStartDate: formatDate(row.VALID_START_DATE),
-    validEndDate: formatDate(row.VALID_END_DATE)
+    CONCEPT_ID: row.CONCEPT_ID,
+    CONCEPT_NAME: row.CONCEPT_NAME,
+    STANDARD_CONCEPT: sc,
+    STANDARD_CONCEPT_CAPTION: STANDARD_CONCEPT_CAPTION[sc] || 'Non-Standard',
+    INVALID_REASON: ir,
+    INVALID_REASON_CAPTION: INVALID_REASON_CAPTION[ir] || ir,
+    CONCEPT_CODE: row.CONCEPT_CODE,
+    CONCEPT_CLASS_ID: row.CONCEPT_CLASS_ID,
+    DOMAIN_ID: row.DOMAIN_ID,
+    VOCABULARY_ID: row.VOCABULARY_ID,
+    VALID_START_DATE: formatDate(row.VALID_START_DATE),
+    VALID_END_DATE: formatDate(row.VALID_END_DATE)
   }
 }
 
 function mapRelatedConcept (row) {
   return {
     ...mapConcept(row),
-    relationshipName: row.RELATIONSHIP_NAME,
-    relationshipDistance: row.RELATIONSHIP_DISTANCE
+    RELATIONSHIP_NAME: row.RELATIONSHIP_NAME,
+    RELATIONSHIP_DISTANCE: row.RELATIONSHIP_DISTANCE
   }
 }
 
@@ -485,7 +492,7 @@ router.get('/:sourceKey/domains', async (req, res, next) => {
   try {
     const source = getSource(req.params.sourceKey)
     const rows = await queryVocab(req.params.sourceKey, renderSql(loadSql('vocabulary/getDomains.sql'), source))
-    res.json(rows.map(r => ({ domainId: r.DOMAIN_ID, domainName: r.DOMAIN_NAME, domainConceptId: r.DOMAIN_CONCEPT_ID })))
+    res.json(rows.map(r => ({ DOMAIN_ID: r.DOMAIN_ID, DOMAIN_NAME: r.DOMAIN_NAME, DOMAIN_CONCEPT_ID: r.DOMAIN_CONCEPT_ID })))
   } catch (err) { next(err) }
 })
 
@@ -494,7 +501,7 @@ router.get('/domains', async (req, res, next) => {
   try {
     const source = defaultSource()
     const rows = await queryVocab(source.sourceKey, renderSql(loadSql('vocabulary/getDomains.sql'), source))
-    res.json(rows.map(r => ({ domainId: r.DOMAIN_ID, domainName: r.DOMAIN_NAME, domainConceptId: r.DOMAIN_CONCEPT_ID })))
+    res.json(rows.map(r => ({ DOMAIN_ID: r.DOMAIN_ID, DOMAIN_NAME: r.DOMAIN_NAME, DOMAIN_CONCEPT_ID: r.DOMAIN_CONCEPT_ID })))
   } catch (err) { next(err) }
 })
 
@@ -504,11 +511,11 @@ router.get('/:sourceKey/vocabularies', async (req, res, next) => {
     const source = getSource(req.params.sourceKey)
     const rows = await queryVocab(req.params.sourceKey, renderSql(loadSql('vocabulary/getVocabularies.sql'), source))
     res.json(rows.map(r => ({
-      vocabularyId: r.VOCABULARY_ID,
-      vocabularyName: r.VOCABULARY_NAME,
-      vocabularyReference: r.VOCABULARY_REFERENCE,
-      vocabularyVersion: r.VOCABULARY_VERSION,
-      vocabularyConceptId: r.VOCABULARY_CONCEPT_ID
+      VOCABULARY_ID: r.VOCABULARY_ID,
+      VOCABULARY_NAME: r.VOCABULARY_NAME,
+      VOCABULARY_REFERENCE: r.VOCABULARY_REFERENCE,
+      VOCABULARY_VERSION: r.VOCABULARY_VERSION,
+      VOCABULARY_CONCEPT_ID: r.VOCABULARY_CONCEPT_ID
     })))
   } catch (err) { next(err) }
 })
@@ -519,11 +526,11 @@ router.get('/vocabularies', async (req, res, next) => {
     const source = defaultSource()
     const rows = await queryVocab(source.sourceKey, renderSql(loadSql('vocabulary/getVocabularies.sql'), source))
     res.json(rows.map(r => ({
-      vocabularyId: r.VOCABULARY_ID,
-      vocabularyName: r.VOCABULARY_NAME,
-      vocabularyReference: r.VOCABULARY_REFERENCE,
-      vocabularyVersion: r.VOCABULARY_VERSION,
-      vocabularyConceptId: r.VOCABULARY_CONCEPT_ID
+      VOCABULARY_ID: r.VOCABULARY_ID,
+      VOCABULARY_NAME: r.VOCABULARY_NAME,
+      VOCABULARY_REFERENCE: r.VOCABULARY_REFERENCE,
+      VOCABULARY_VERSION: r.VOCABULARY_VERSION,
+      VOCABULARY_CONCEPT_ID: r.VOCABULARY_CONCEPT_ID
     })))
   } catch (err) { next(err) }
 })

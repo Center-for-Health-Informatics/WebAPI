@@ -46,20 +46,20 @@ router.get('/:personId', async (req, res, next) => {
     const recResult = await pool.request().query(recSql)
 
     const profile = {
-      gender: personRow.gender || personRow.GENDER || '',
-      yearOfBirth: personRow.year_of_birth || personRow.YEAR_OF_BIRTH || 0,
+      gender: personRow.GENDER || '',
+      yearOfBirth: personRow.YEAR_OF_BIRTH || 0,
       observationPeriods: opResult.recordset.map(r => ({
-        id: r.observation_period_id ?? r.OBSERVATION_PERIOD_ID,
-        startDate: r.start_date ?? r.START_DATE,
-        endDate: r.end_date ?? r.END_DATE,
-        type: r.observation_period_type ?? r.OBSERVATION_PERIOD_TYPE
+        id: r.OBSERVATION_PERIOD_ID,
+        startDate: r.START_DATE,
+        endDate: r.END_DATE,
+        type: r.OBSERVATION_PERIOD_TYPE
       })),
       records: recResult.recordset.map(r => ({
-        conceptId: r.concept_id ?? r.CONCEPT_ID,
-        conceptName: r.concept_name ?? r.CONCEPT_NAME,
-        domain: r.domain ?? r.DOMAIN,
-        startDate: r.start_date ?? r.START_DATE,
-        endDate: r.end_date ?? r.END_DATE
+        conceptId: r.CONCEPT_ID,
+        conceptName: r.CONCEPT_NAME,
+        domain: r.DOMAIN,
+        startDate: r.START_DATE,
+        endDate: r.END_DATE
       }))
     }
 
