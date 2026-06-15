@@ -37,7 +37,8 @@ function rowToDto (row, includeExpression = false) {
 
   if (includeExpression) {
     const detail = db.prepare('SELECT expression FROM cohort_definition_details WHERE id = ?').get(row.id)
-    dto.expression = detail && detail.expression ? JSON.parse(detail.expression) : null
+    // Atlas calls JSON.parse(cohortDef.expression) itself — return the raw string, not a parsed object
+    dto.expression = detail?.expression || null
   }
 
   return dto
