@@ -36,6 +36,15 @@ app.use((req, res, next) => {
 
 app.use(userMiddleware)
 
+app.use((req, res, next) => {
+  const start = Date.now()
+  res.on('finish', () => {
+    const ms = Date.now() - start
+    process.stdout.write(`${new Date().toISOString()} ${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms\n`)
+  })
+  next()
+})
+
 app.use('/i18n', i18nRouter)
 app.use('/info', infoRouter)
 app.use('/source', sourceRouter)
