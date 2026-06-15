@@ -19,6 +19,7 @@ import predictionRouter from './routes/prediction.js'
 import tagsRouter from './routes/tags.js'
 import cohortresultsRouter from './routes/cohortresults.js'
 import personRouter from './routes/person.js'
+import sqlrenderRouter from './routes/sqlrender.js'
 
 const app = express()
 
@@ -61,6 +62,7 @@ app.use('/estimation', estimationRouter)
 app.use('/prediction', predictionRouter)
 app.use('/tag', tagsRouter)
 app.use('/cohortresults', cohortresultsRouter)
+app.use('/sqlrender', sqlrenderRouter)
 // Person profile: /:sourceKey/person/:personId — must come after all fixed-prefix routes
 app.use('/:sourceKey/person', personRouter)
 app.use('/', userRouter)

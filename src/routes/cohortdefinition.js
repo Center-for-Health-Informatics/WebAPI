@@ -63,13 +63,17 @@ router.post('/sql', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// POST /check → return empty warnings (CIRCE validation not implemented)
-router.post('/check', (_req, res) => res.json([]))
-router.post('/checkV2', (_req, res) => res.json([]))
+// POST /check, /checkV2 → return empty warnings ({ warnings: [] } shape required by Atlas warnings.js)
+router.post('/check', (_req, res) => res.json({ warnings: [] }))
+router.post('/checkV2', (_req, res) => res.json({ warnings: [] }))
 
-// POST /printfriendly/cohort → 501
-router.post('/printfriendly/cohort', (_req, res) => res.sendStatus(501))
-router.post('/printfriendly/conceptsets', (_req, res) => res.sendStatus(501))
+// POST /printfriendly/cohort → minimal HTML placeholder (Atlas displays this in the "Text View" export tab)
+router.post('/printfriendly/cohort', (_req, res) => {
+  res.type('text/html').send('<p>Print-friendly view not implemented. Use Export &rarr; SQL to view generated SQL.</p>')
+})
+router.post('/printfriendly/conceptsets', (_req, res) => {
+  res.type('text/html').send('<p>Print-friendly view not implemented.</p>')
+})
 
 // GET /
 router.get('/', (_req, res) => {
