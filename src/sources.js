@@ -18,6 +18,7 @@ function buildPoolConfig (source) {
       trustServerCertificate: source.trustServerCertificate || false,
       enableArithAbort: true
     },
+    requestTimeout: 60000,
     pool: {
       max: 10,
       min: 0,

@@ -114,7 +114,7 @@ function buildSearchFilters (search, request) {
   if (search.query) {
     const q = search.query.replace('[', '[[]').toLowerCase()
     request.input('searchQ', sql.NVarChar, `%${q}%`)
-    let qFilter = '(LOWER(CONCEPT_NAME) LIKE @searchQ OR LOWER(CONCEPT_CODE) LIKE @searchQ'
+    let qFilter = '(CONCEPT_NAME LIKE @searchQ OR CONCEPT_CODE LIKE @searchQ'
     if (/^\d+$/.test(search.query)) {
       request.input('searchQInt', sql.Int, parseInt(search.query, 10))
       qFilter += ' OR CONCEPT_ID = @searchQInt'
