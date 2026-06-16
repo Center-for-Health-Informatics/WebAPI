@@ -556,7 +556,14 @@ router.get('/info', async (req, res, next) => {
   } catch (err) { next(err) }
 })
 
-// POST /conceptSetExpressionSQL — not implemented (CIRCE dependency for cohort SQL)
-router.post('/conceptSetExpressionSQL', (_req, res) => res.sendStatus(501))
+// POST /conceptSetExpressionSQL — returns SQL that expands the concept set expression
+// Atlas calls this via plainTextService so it expects a plain text SQL string back
+router.post('/conceptSetExpressionSQL', (req, res, next) => {
+  try {
+    const source = defaultSource()
+    const sql = buildConceptSetExpressionSql(req.body, source.vocabSchema)
+    res.type('text/plain').send(sql)
+  } catch (err) { next(err) }
+})
 
 export default router
