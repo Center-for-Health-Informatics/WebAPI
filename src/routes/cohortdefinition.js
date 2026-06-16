@@ -280,7 +280,7 @@ router.get('/:id/generate/:sourceKey', async (req, res, next) => {
         targetTable,
         resultSchema: source.resultsSchema,
         vocabularySchema: source.vocabSchema,
-        generateStats: inclusionRules.length > 0
+        generateStats: true
       })
 
       console.log(`[cohort ${cohortId}@${sourceKey}] Executing...`)
