@@ -15,12 +15,12 @@ const CDM_SQL_DIR = path.join(__dirname, '..', 'sql', 'cdmresults')
 // Normalize a SQL column name to camelCase.
 // Strings without underscores (already camelCase) are returned as-is.
 // UPPER_CASE and lower_case_snake are both converted.
-function toCamelCase (str) {
+export function toCamelCase (str) {
   if (!str.includes('_')) return str
   return str.toLowerCase().replace(/_([a-z])/g, (_, c) => c.toUpperCase())
 }
 
-function normalizeRow (row) {
+export function normalizeRow (row) {
   const out = {}
   for (const [k, v] of Object.entries(row)) out[toCamelCase(k)] = v
   return out

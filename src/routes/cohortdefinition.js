@@ -416,12 +416,12 @@ function countSetBits (n) {
   return count
 }
 
-function formatBitMask (n, size) {
+export function formatBitMask (n, size) {
   // Reverse of left-zero-padded binary string — matches Java's formatBitMask
   return BigInt(n).toString(2).padStart(size, '0').split('').reverse().join('')
 }
 
-function buildTreemapData (rows, ruleCount) {
+export function buildTreemapData (rows, ruleCount) {
   const groups = {}
   for (const row of rows) {
     const mask = Number(row.inclusion_rule_mask)
