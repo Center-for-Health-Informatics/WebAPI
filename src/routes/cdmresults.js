@@ -12,6 +12,20 @@ const CDM_SQL_DIR = path.join(__dirname, '..', 'sql', 'cdmresults')
 
 // --- helpers ---
 
+// Normalize a SQL column name to camelCase.
+// Strings without underscores (already camelCase) are returned as-is.
+// UPPER_CASE and lower_case_snake are both converted.
+function toCamelCase (str) {
+  if (!str.includes('_')) return str
+  return str.toLowerCase().replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+}
+
+function normalizeRow (row) {
+  const out = {}
+  for (const [k, v] of Object.entries(row)) out[toCamelCase(k)] = v
+  return out
+}
+
 // Run a single CDM results SQL template against a source.
 async function runReport (sourceKey, relPath, extraParams) {
   const source = getSource(sourceKey)
@@ -19,7 +33,7 @@ async function runReport (sourceKey, relPath, extraParams) {
   const rawSql = loadSql(`cdmresults/${relPath}`)
   const rendered = renderSql(rawSql, source, extraParams || {})
   const result = await pool.request().query(rendered)
-  return result.recordset
+  return result.recordset.map(normalizeRow)
 }
 
 // Run all *.sql files in a directory, returning { filename_without_ext: rows[] }.
@@ -36,7 +50,7 @@ async function runDirectory (sourceKey, relDir, extraParams) {
     const rendered = renderSql(rawSql, source, extraParams || {})
     try {
       const result = await pool.request().query(rendered)
-      out[file.replace('.sql', '')] = result.recordset
+      out[file.replace('.sql', '')] = result.recordset.map(normalizeRow)
     } catch (err) {
       out[file.replace('.sql', '')] = []
     }

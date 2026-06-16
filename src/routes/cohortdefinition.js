@@ -37,10 +37,19 @@ function rowToDto (row, includeExpression = false) {
 
   if (includeExpression) {
     const detail = db.prepare('SELECT expression FROM cohort_definition_details WHERE id = ?').get(row.id)
-    // Atlas calls JSON.parse(cohortDef.expression) itself — return the raw string, not a parsed object
+    // Atlas's getCohortDefinition calls JSON.parse on the GET response, so return the raw string there.
+    // For PUT/POST/copy responses Atlas does NOT parse — parseExpression=true returns a parsed object.
     dto.expression = detail?.expression || null
   }
 
+  return dto
+}
+
+// Parse dto.expression string → object (for PUT/POST responses; GET callers parse it themselves)
+function parsedExpression (dto) {
+  if (dto.expression && typeof dto.expression === 'string') {
+    try { dto.expression = JSON.parse(dto.expression) } catch (_) {}
+  }
   return dto
 }
 
@@ -101,7 +110,7 @@ router.post('/', (req, res) => {
 
   const id = insertDef()
   const row = db.prepare('SELECT * FROM cohort_definition WHERE id = ?').get(id)
-  res.status(201).json(rowToDto(row, true))
+  res.status(201).json(parsedExpression(rowToDto(row, true)))
 })
 
 // --- parameterised routes ---
@@ -146,7 +155,7 @@ router.put('/:id', (req, res) => {
   })()
 
   const updated = db.prepare('SELECT * FROM cohort_definition WHERE id = ?').get(row.id)
-  res.json(rowToDto(updated, true))
+  res.json(parsedExpression(rowToDto(updated, true)))
 })
 
 // DELETE /:id
@@ -176,7 +185,7 @@ router.get('/:id/copy', (req, res) => {
   })()
 
   const copied = db.prepare('SELECT * FROM cohort_definition WHERE id = ?').get(newId)
-  res.json(rowToDto(copied, true))
+  res.json(parsedExpression(rowToDto(copied, true)))
 })
 
 const STATUS_MAP = { STARTED: 'RUNNING', COMPLETED: 'COMPLETE', CANCELED: 'FAILED' }
@@ -250,7 +259,7 @@ router.get('/:id/generate/:sourceKey', async (req, res, next) => {
 
       // Write inclusion rule names before running CIRCE SQL — these are read back by the report endpoint
       const pool = getPool(sourceKey)
-      const inclusionRules = expression.inclusionRules || []
+      const inclusionRules = expression.InclusionRules || expression.inclusionRules || []
       await pool.request().query(
         `DELETE FROM ${source.resultsSchema}.cohort_inclusion WHERE cohort_definition_id = ${cohortId}`
       )
