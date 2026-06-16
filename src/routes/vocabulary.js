@@ -541,7 +541,7 @@ router.get('/:sourceKey/info', async (req, res, next) => {
     const source = getSource(req.params.sourceKey)
     const rows = await queryVocab(req.params.sourceKey, renderSql(loadSql('vocabulary/getInfo.sql'), source))
     const version = rows.length > 0 ? rows[0].VOCABULARY_VERSION : null
-    res.json({ vocabularyVersion: version, dialect: 'sql server' })
+    res.json({ version, dialect: 'sql server' })
   } catch (err) { next(err) }
 })
 
@@ -552,7 +552,7 @@ router.get('/info', async (req, res, next) => {
     const source = defaultSource()
     const rows = await queryVocab(source.sourceKey, renderSql(loadSql('vocabulary/getInfo.sql'), source))
     const version = rows.length > 0 ? rows[0].VOCABULARY_VERSION : null
-    res.json({ vocabularyVersion: version, dialect: 'sql server' })
+    res.json({ version, dialect: 'sql server' })
   } catch (err) { next(err) }
 })
 

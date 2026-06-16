@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { readFileSync, readdirSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname, basename } from 'path'
-import { getSource } from '../sources.js'
+import { getSource, getPool } from '../sources.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SQL_DIR = join(__dirname, '../sql/cohortresults')
@@ -30,6 +30,10 @@ function renderSql (sql, source, cohortId, extraParams = {}) {
   }, sql)
 }
 
+function normKey (name) {
+  return name.replace(/^sql/i, '').replace(/^[A-Z]/, c => c.toLowerCase())
+}
+
 async function runSql (pool, sql) {
   const result = await pool.request().query(sql)
   return result.recordset || []
@@ -37,7 +41,7 @@ async function runSql (pool, sql) {
 
 async function runFile (source, relPath, cohortId, extraParams = {}) {
   const sql = readFileSync(join(SQL_DIR, relPath), 'utf8')
-  return runSql(source.pool, renderSql(sql, source, cohortId, extraParams))
+  return runSql(getPool(source.sourceKey), renderSql(sql, source, cohortId, extraParams))
 }
 
 async function runDirectory (source, relDir, cohortId, extraParams = {}) {
@@ -76,8 +80,8 @@ router.get('/:sourceKey/:id/analyses', async (req, res, next) => {
       `SELECT DISTINCT analysis_id FROM @ohdsi_database_schema.heracles_results WHERE cohort_definition_id = @cohortDefinitionId`,
       src, req.params.id
     )
-    const rows = await runSql(src.pool, sql)
-    res.json(rows.map(r => r.ANALYSIS_ID))
+    const rows = await runSql(getPool(src.sourceKey), sql)
+    res.json(rows.map(r => r.analysis_id))
   } catch { res.json([]) }
 })
 
@@ -90,8 +94,8 @@ router.get('/:sourceKey/:id/completed', async (req, res, next) => {
       `SELECT DISTINCT analysis_id FROM @ohdsi_database_schema.heracles_results WHERE cohort_definition_id = @cohortDefinitionId`,
       src, req.params.id
     )
-    const rows = await runSql(src.pool, sql)
-    res.json(rows.map(r => String(r.ANALYSIS_ID)))
+    const rows = await runSql(getPool(src.sourceKey), sql)
+    res.json(rows.map(r => String(r.analysis_id)))
   } catch { res.json([]) }
 })
 
@@ -255,8 +259,8 @@ router.get('/:sourceKey/:id/distinctPersonCount', async (req, res, next) => {
       `SELECT count_value FROM @ohdsi_database_schema.heracles_results WHERE analysis_id = 1 AND cohort_definition_id = @cohortDefinitionId`,
       src, req.params.id
     )
-    const rows = await runSql(src.pool, sql)
-    res.json(rows[0]?.COUNT_VALUE ?? 0)
+    const rows = await runSql(getPool(src.sourceKey), sql)
+    res.json(rows[0]?.count_value ?? 0)
   } catch { res.json(0) }
 })
 

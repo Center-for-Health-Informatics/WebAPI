@@ -108,9 +108,44 @@ That framing — consumer-first, format-aware — would have caught every bug li
 
 ---
 
+## Second Audit — 2026-06-16
+
+The methodology above was applied for the first time. Six additional bugs were found and fixed.
+
+### Critical — all Heracles cohort results returned 500
+
+**`cohortresults.js` called `normKey()` (undefined) and `source.pool` (undefined).**  
+`normKey` was used in `runDirectory` to key SQL file results but was never defined, causing `ReferenceError` on any endpoint that reads from directories of SQL files (observationperiod, death, heraclesheel, all domain drilldowns, cohort-specific). Separately, `runFile` called `source.pool` but pools are stored in a private `Map` accessible only via `getPool(sourceKey)` — the config source object has no `.pool` property.  
+*Fix:* Define `normKey` (strips `sql` prefix, lowercases first char). Import `getPool` and use it inside `runFile`. Also fixed two inline `runSql(src.pool, sql)` calls.
+
+**Same file: column casing bug in `analyses` and `distinctPersonCount` endpoints.**  
+SQL queries produce lowercase column names (`analysis_id`, `count_value`); code accessed uppercase variants (`ANALYSIS_ID`, `COUNT_VALUE`), always returning `undefined`.  
+*Fix:* Access `r.analysis_id`, `r.count_value`.
+
+### High — vocabulary version always blank
+
+**`GET /vocabulary/:sourceKey/info` returned `{ vocabularyVersion }` not `{ version }`.**  
+`SourceAPI.js` reads `info.version` to display the vocabulary version in the Configuration screen. We returned `vocabularyVersion`. Field was always `undefined`; version badge always blank.  
+*Fix:* Return `{ version, dialect }`.
+
+### Medium — cohort definition version crashes on load
+
+**`GET /cohortdefinition/:id/version/:ver` returned a flat DTO instead of `{ entityDTO, versionDTO }`.**  
+`CohortDefinition.js:163-166` does `const cohortDef = res.data.entityDTO; cohortDef.expression = JSON.parse(cohortDef.expression)`. We returned a flat version DTO; `res.data.entityDTO` was `undefined`; accessing `.expression` on undefined threw `TypeError`.  
+*Fix:* Return `{ entityDTO: { ...fullCohortDef, expression: versionRow.expression }, versionDTO: versionDto }`.
+
+### Suspicious — not yet fixed
+
+- **`source/details/:sourceKey` (BUG-6):** Our `GET /:key` route at `/source` cannot match a two-segment path. `SourceAPI.js` calls `GET source/details/:sourceKey` for the admin Source edit dialog → always 404. Admin-only; doesn't affect routine Atlas use.
+- **`source/connection/:sourceKey` (SUSPECT-7):** Same structural issue. "Test Connection" button always returns 404.
+- **`jobParameters.jobName` missing from generation job response (BUG-7):** Job name shows as blank in status panel. Visual only, no crash.
+
+---
+
 ## Known Remaining Gaps
 
-- `GET /:id/report/:sourceKey` — returns 501. Needs `generateStats=true` in CIRCE plus additional Achilles tables.
+- `GET /cohortdefinition/:id/report/:sourceKey` — returns 501. Needs `generateStats=true` in CIRCE plus additional Achilles tables.
 - `isDemographic` missing from generation info.
 - Dialect translation in `/sqlrender/translate` is a pass-through for non-SQL-Server dialects.
 - Vocabulary search does not include `PERSON_COUNT` / `DESCENDANT_PERSON_COUNT` (our concept count table only has record counts, not person counts from Achilles).
+- Admin: `GET /source/details/:sourceKey` and `GET /source/connection/:sourceKey` missing (configuration screen only).

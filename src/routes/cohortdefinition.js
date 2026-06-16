@@ -367,7 +367,10 @@ router.get('/:id/version/:ver', (req, res) => {
     'SELECT * FROM version WHERE entity_type = ? AND entity_id = ? AND version = ?'
   ).get(ENTITY_TYPE, req.params.id, req.params.ver)
   if (!row) return res.status(404).json({ message: 'Version not found' })
-  res.json(versionToDto(row))
+  const defRow = db.prepare('SELECT * FROM cohort_definition WHERE id = ?').get(req.params.id)
+  // Atlas calls JSON.parse(entityDTO.expression) — return expression as raw string from version snapshot
+  const entityDTO = defRow ? { ...rowToDto(defRow), expression: row.expression || null } : null
+  res.json({ entityDTO, versionDTO: versionToDto(row) })
 })
 
 router.put('/:id/version/:ver', (req, res) => {
