@@ -202,7 +202,7 @@ router.get('/:sourceKey/:domain', async (req, res, next) => {
     const rawSql = loadSql(`cdmresults/report/${domain}/treemap.sql`)
     const rendered = renderSql(rawSql, source)
     const result = await pool.request().query(rendered)
-    res.json(result.recordset)
+    res.json(result.recordset.map(normalizeRow))
   } catch (err) {
     // SQL error 208 = "Invalid object name" — results schema tables (e.g. concept_hierarchy)
     // may not exist if Achilles hasn't been run. Return empty rather than 500.
