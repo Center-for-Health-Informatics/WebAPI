@@ -248,13 +248,30 @@ router.get('/:id/generate/:sourceKey', async (req, res, next) => {
       const expression = JSON.parse(detail.expression)
       const targetTable = `${source.resultsSchema}.cohort`
 
+      // Write inclusion rule names before running CIRCE SQL — these are read back by the report endpoint
+      const pool = getPool(sourceKey)
+      const inclusionRules = expression.inclusionRules || []
+      await pool.request().query(
+        `DELETE FROM ${source.resultsSchema}.cohort_inclusion WHERE cohort_definition_id = ${cohortId}`
+      )
+      for (let i = 0; i < inclusionRules.length; i++) {
+        const rule = inclusionRules[i]
+        await pool.request()
+          .input('cid', mssql.Int, cohortId)
+          .input('seq', mssql.Int, i)
+          .input('name', mssql.VarChar(255), rule.name || '')
+          .input('desc', mssql.VarChar(1000), rule.description || '')
+          .query(`INSERT INTO ${source.resultsSchema}.cohort_inclusion (cohort_definition_id, rule_sequence, name, description) VALUES (@cid, @seq, @name, @desc)`)
+      }
+
       console.log(`[cohort ${cohortId}@${sourceKey}] Generating SQL...`)
       const cohortSql = await generateCohortSql(expression, {
         cohortId,
         cdmSchema: source.cdmSchema,
         targetTable,
         resultSchema: source.resultsSchema,
-        vocabularySchema: source.vocabSchema
+        vocabularySchema: source.vocabSchema,
+        generateStats: inclusionRules.length > 0
       })
 
       console.log(`[cohort ${cohortId}@${sourceKey}] Executing...`)
@@ -309,8 +326,113 @@ router.get('/:id/cancel/:sourceKey', (req, res) => {
   res.json({ status: 'CANCELED' })
 })
 
-// GET /:id/report/:sourceKey → 501
-router.get('/:id/report/:sourceKey', (_req, res) => res.sendStatus(501))
+// GET /:id/report/:sourceKey → inclusion rule stats report
+// ?mode=0 (by event, default) or ?mode=1 (by person)
+router.get('/:id/report/:sourceKey', async (req, res, next) => {
+  const cohortId = parseInt(req.params.id, 10)
+  const sourceKey = req.params.sourceKey
+  const modeId = parseInt(req.query.mode ?? 0, 10)
+
+  let source
+  try { source = getSource(sourceKey) } catch { return res.status(404).json({ message: 'Source not found' }) }
+
+  try {
+    const pool = getPool(sourceKey)
+    const rs = source.resultsSchema
+
+    // Summary: base_count, final_count, lost_count
+    const summaryResult = await pool.request().query(
+      `SELECT cs.base_count, cs.final_count, COALESCE(cc.lost_count, 0) AS lost_count
+       FROM ${rs}.cohort_summary_stats cs
+       LEFT JOIN ${rs}.cohort_censor_stats cc ON cc.cohort_definition_id = cs.cohort_definition_id
+       WHERE cs.cohort_definition_id = ${cohortId} AND cs.mode_id = ${modeId}`
+    )
+    const summaryRow = summaryResult.recordset[0]
+    if (!summaryRow) {
+      // No stats yet — return empty report so Atlas shows a blank rather than crashing
+      return res.json({ summary: { baseCount: 0, finalCount: 0, lostCount: 0, percentMatched: '0.00%' }, inclusionRuleStats: [], treemapData: '{"name":"Everyone","children":[]}' })
+    }
+
+    const baseCount = Number(summaryRow.base_count)
+    const finalCount = Number(summaryRow.final_count)
+    const lostCount = Number(summaryRow.lost_count)
+    const matchRatio = baseCount > 0 ? finalCount / baseCount : 0
+    const summary = {
+      baseCount,
+      finalCount,
+      lostCount,
+      percentMatched: (matchRatio * 100).toFixed(2) + '%'
+    }
+
+    // Inclusion rule stats: join cohort_inclusion (names) with cohort_inclusion_stats (counts)
+    const statsResult = await pool.request().query(
+      `SELECT i.rule_sequence, i.name, s.person_count, s.gain_count, s.person_total
+       FROM ${rs}.cohort_inclusion i
+       JOIN ${rs}.cohort_inclusion_stats s
+         ON i.cohort_definition_id = s.cohort_definition_id AND i.rule_sequence = s.rule_sequence
+       WHERE i.cohort_definition_id = ${cohortId} AND s.mode_id = ${modeId}
+       ORDER BY i.rule_sequence`
+    )
+    const inclusionRuleStats = statsResult.recordset.map(r => {
+      const personTotal = Number(r.person_total)
+      const satisfyCount = Number(r.person_count)
+      const gainCount = Number(r.gain_count)
+      const satisfyRatio = personTotal > 0 ? satisfyCount / personTotal : 0
+      const excludeRatio = personTotal > 0 ? gainCount / personTotal : 0
+      return {
+        id: r.rule_sequence,
+        name: r.name,
+        countSatisfying: satisfyCount,
+        percentSatisfying: (satisfyRatio * 100).toFixed(2) + '%',
+        percentExcluded: (excludeRatio * 100).toFixed(2) + '%'
+      }
+    })
+
+    // Treemap data: built from inclusion_rule_mask bitmask counts
+    const maskResult = await pool.request().query(
+      `SELECT inclusion_rule_mask, person_count
+       FROM ${rs}.cohort_inclusion_result
+       WHERE cohort_definition_id = ${cohortId} AND mode_id = ${modeId}`
+    )
+    const treemapData = buildTreemapData(maskResult.recordset, inclusionRuleStats.length)
+
+    res.json({ summary, inclusionRuleStats, treemapData })
+  } catch (err) { next(err) }
+})
+
+function countSetBits (n) {
+  let count = 0
+  let num = BigInt(n)
+  while (num > 0n) { count += Number(num & 1n); num >>= 1n }
+  return count
+}
+
+function formatBitMask (n, size) {
+  // Reverse of left-zero-padded binary string — matches Java's formatBitMask
+  return BigInt(n).toString(2).padStart(size, '0').split('').reverse().join('')
+}
+
+function buildTreemapData (rows, ruleCount) {
+  const groups = {}
+  for (const row of rows) {
+    const mask = Number(row.inclusion_rule_mask)
+    const bits = countSetBits(mask)
+    if (!groups[bits]) groups[bits] = []
+    groups[bits].push([mask, Number(row.person_count)])
+  }
+
+  const groupKeys = Object.keys(groups).map(Number).sort((a, b) => b - a)
+
+  const children = groupKeys.map(key => ({
+    name: `Group ${key}`,
+    children: groups[key].map(([mask, count]) => ({
+      name: formatBitMask(mask, ruleCount),
+      size: count
+    }))
+  }))
+
+  return JSON.stringify({ name: 'Everyone', children })
+}
 
 // GET /:id/export/conceptset → stub
 router.get('/:id/export/conceptset', (_req, res) => res.sendStatus(501))

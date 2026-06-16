@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const JAR = path.join(__dirname, '..', 'lib', 'circe.jar')
 
-export function generateCohortSql (expression, { cohortId, cdmSchema, targetTable, resultSchema, vocabularySchema }) {
+export function generateCohortSql (expression, { cohortId, cdmSchema, targetTable, resultSchema, vocabularySchema, generateStats = false }) {
   return new Promise((resolve, reject) => {
     const proc = spawn('java', ['-jar', JAR])
     let out = '', err = ''
@@ -16,6 +16,6 @@ export function generateCohortSql (expression, { cohortId, cdmSchema, targetTabl
       else resolve(out)
     })
     proc.on('error', reject)
-    proc.stdin.end(JSON.stringify({ cohortId, cdmSchema, targetTable, resultSchema, vocabularySchema, expression }))
+    proc.stdin.end(JSON.stringify({ cohortId, cdmSchema, targetTable, resultSchema, vocabularySchema, generateStats, expression }))
   })
 }
