@@ -1,5 +1,6 @@
 import express from 'express'
 import userMiddleware from './middleware/user.js'
+import proxyBaseMiddleware from './middleware/proxyBase.js'
 import errorHandler from './middleware/errors.js'
 import i18nRouter from './routes/i18n.js'
 import infoRouter from './routes/info.js'
@@ -35,6 +36,7 @@ app.use((req, res, next) => {
   next()
 })
 
+app.use(proxyBaseMiddleware)
 app.use(userMiddleware)
 
 app.use((req, res, next) => {
