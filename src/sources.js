@@ -5,6 +5,19 @@ import { loadSql, renderSql } from './sqlrender.js'
 // One mssql connection pool per source, keyed by sourceKey
 const pools = new Map()
 
+// Connection status per source, keyed by sourceKey — { connected, error, lastAttempt }
+const statuses = new Map()
+
+// Build a config object for a dedicated no-timeout pool used by long-running DDL jobs.
+// mssql's ConnectionPool only parses a connection string when passed as a bare string —
+// an object with a `connectionString` key is used as-is, leaving `config.server` unset.
+function buildDdlPoolConfig (source) {
+  const base = source.connectionString
+    ? sql.ConnectionPool.parseConnectionString(source.connectionString)
+    : buildPoolConfig(source)
+  return { ...base, requestTimeout: 0 }
+}
+
 function buildPoolConfig (source) {
   return {
     server: source.server,
@@ -44,10 +57,7 @@ async function initConceptCount (pool, source) {
     throw err
   }
 
-  const ddlCfg = source.connectionString
-    ? { connectionString: source.connectionString, requestTimeout: 0 }
-    : { ...buildPoolConfig(source), requestTimeout: 0 }
-  const ddlPool = await new sql.ConnectionPool(ddlCfg).connect()
+  const ddlPool = await new sql.ConnectionPool(buildDdlPoolConfig(source)).connect()
   try {
     console.log(`[${source.sourceKey}] Populating achilles_result_concept_count...`)
     const populateSql = renderSql(loadSql('ddl/concept_count_populate.sql'), source)
@@ -72,10 +82,7 @@ async function initConceptHierarchy (pool, source) {
 
   // requestTimeout is baked into the tedious connection, not settable per-request,
   // so use a dedicated pool with no timeout for the long-running vocab joins.
-  const ddlCfg = source.connectionString
-    ? { connectionString: source.connectionString, requestTimeout: 0 }
-    : { ...buildPoolConfig(source), requestTimeout: 0 }
-  const ddlPool = await new sql.ConnectionPool(ddlCfg).connect()
+  const ddlPool = await new sql.ConnectionPool(buildDdlPoolConfig(source)).connect()
   try {
     console.log(`[${source.sourceKey}] Populating concept_hierarchy (this may take several minutes)...`)
     const populateSql = renderSql(loadSql('ddl/concept_hierarchy_populate.sql'), source)
@@ -98,31 +105,51 @@ async function initStatsTable (pool, source) {
   await pool.request().query(createSql)
 }
 
+// Attempt to connect a single source, updating pools/statuses. Returns true on success.
+async function connectSource (source) {
+  try {
+    const pool = source.connectionString
+      ? await new sql.ConnectionPool(source.connectionString).connect()
+      : await new sql.ConnectionPool(buildPoolConfig(source)).connect()
+    pools.set(source.sourceKey, pool)
+    statuses.set(source.sourceKey, { connected: true, error: null, lastAttempt: new Date() })
+    console.log(`Connected to source: ${source.sourceKey}`)
+    initCohortTable(pool, source).catch(err =>
+      console.error(`[${source.sourceKey}] cohort table init failed: ${err.message}`)
+    )
+    initStatsTable(pool, source).catch(err =>
+      console.error(`[${source.sourceKey}] cohort stats tables init failed: ${err.message}`)
+    )
+    initConceptHierarchy(pool, source).catch(err =>
+      console.error(`[${source.sourceKey}] concept_hierarchy init failed: ${err.message}`)
+    )
+    initConceptCount(pool, source).catch(err =>
+      console.error(`[${source.sourceKey}] achilles_result_concept_count init failed: ${err.message}`)
+    )
+    return true
+  } catch (err) {
+    statuses.set(source.sourceKey, { connected: false, error: err.message, lastAttempt: new Date() })
+    console.error(`Failed to connect to source ${source.sourceKey}: ${err.message}`)
+    return false
+  }
+}
+
 // Eagerly open all pools on startup
 export async function initSources () {
   for (const source of config.sources) {
-    try {
-      const pool = source.connectionString
-        ? await new sql.ConnectionPool(source.connectionString).connect()
-        : await new sql.ConnectionPool(buildPoolConfig(source)).connect()
-      pools.set(source.sourceKey, pool)
-      console.log(`Connected to source: ${source.sourceKey}`)
-      initCohortTable(pool, source).catch(err =>
-        console.error(`[${source.sourceKey}] cohort table init failed: ${err.message}`)
-      )
-      initStatsTable(pool, source).catch(err =>
-        console.error(`[${source.sourceKey}] cohort stats tables init failed: ${err.message}`)
-      )
-      initConceptHierarchy(pool, source).catch(err =>
-        console.error(`[${source.sourceKey}] concept_hierarchy init failed: ${err.message}`)
-      )
-      initConceptCount(pool, source).catch(err =>
-        console.error(`[${source.sourceKey}] achilles_result_concept_count init failed: ${err.message}`)
-      )
-    } catch (err) {
-      console.error(`Failed to connect to source ${source.sourceKey}: ${err.message}`)
+    await connectSource(source)
+  }
+}
+
+// Re-attempt connection for any source that isn't currently connected.
+// Does not touch sources that are already connected — avoids dropping a live pool.
+export async function refreshSources () {
+  for (const source of config.sources) {
+    if (!pools.has(source.sourceKey)) {
+      await connectSource(source)
     }
   }
+  return getAllSourceInfos()
 }
 
 // Get a connected pool by sourceKey; throws if not found
@@ -158,12 +185,18 @@ export function toSourceInfo (source, index) {
     daimons.push({ sourceDaimonId: daimonBase + 4, daimonType: 'Temp', tableQualifier: source.tempSchema, priority: 0 })
   }
 
+  const status = statuses.get(source.sourceKey)
+
   return {
     sourceId: id,
     sourceName: source.sourceName,
     sourceKey: source.sourceKey,
     sourceDialect: 'sql server',
-    daimons
+    daimons,
+    sourceStatus: status
+      ? (status.connected ? 'connected' : 'disconnected')
+      : 'unknown',
+    sourceStatusError: status && !status.connected ? status.error : undefined
   }
 }
 

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getAllSourceInfos, toSourceInfo, getSource } from '../sources.js'
+import { getAllSourceInfos, refreshSources, toSourceInfo, getSource } from '../sources.js'
 import config from '../config.js'
 
 const router = Router()
@@ -9,9 +9,9 @@ router.get('/sources', (req, res) => {
   res.json(getAllSourceInfos())
 })
 
-// Refresh endpoint — no-op in our static config model
-router.get('/refresh', (req, res) => {
-  res.json(getAllSourceInfos())
+// Refresh endpoint — re-attempts connecting any source that isn't currently connected
+router.get('/refresh', async (req, res) => {
+  res.json(await refreshSources())
 })
 
 // Priority vocabulary source — first source that has a Vocabulary daimon

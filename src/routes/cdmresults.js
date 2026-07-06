@@ -135,8 +135,8 @@ router.get('/:sourceKey/observationPeriod', async (req, res, next) => {
     const [
       ageAtFirst, observationLength, observationLengthStats,
       personsWithContinuousObservationsByYearStats, personsWithContinuousObservationsByYear,
-      ageByGender, observationLengthByAge, observationLengthByGender,
-      observedByMonth, periodsPerPerson
+      ageByGender, durationByAgeDecile, durationByGender,
+      observedByMonth, observationPeriodsPerPerson, cumulativeObservation
     ] = await Promise.all([
       runReport(sk, 'report/observationperiod/ageatfirst.sql'),
       runReport(sk, 'report/observationperiod/observationlength_data.sql'),
@@ -147,13 +147,14 @@ router.get('/:sourceKey/observationPeriod', async (req, res, next) => {
       runReport(sk, 'report/observationperiod/observationlengthbyage.sql'),
       runReport(sk, 'report/observationperiod/observationlengthbygender.sql'),
       runReport(sk, 'report/observationperiod/observedbymonth.sql'),
-      runReport(sk, 'report/observationperiod/periodsperperson.sql')
+      runReport(sk, 'report/observationperiod/periodsperperson.sql'),
+      runReport(sk, 'report/observationperiod/cumulativeduration.sql')
     ])
     res.json({
       ageAtFirst, observationLength, observationLengthStats,
       personsWithContinuousObservationsByYearStats, personsWithContinuousObservationsByYear,
-      ageByGender, observationLengthByAge, observationLengthByGender,
-      observedByMonth, periodsPerPerson
+      ageByGender, durationByAgeDecile, durationByGender,
+      observedByMonth, observationPeriodsPerPerson, cumulativeObservation
     })
   } catch (err) { next(err) }
 })
