@@ -17,7 +17,7 @@ const CDM_SQL_DIR = path.join(__dirname, '..', 'sql', 'cdmresults')
 // UPPER_CASE and lower_case_snake are both converted.
 export function toCamelCase (str) {
   if (!str.includes('_')) return str
-  return str.toLowerCase().replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+  return str.toLowerCase().replace(/_+([a-z0-9])/g, (_, c) => c.toUpperCase())
 }
 
 export function normalizeRow (row) {

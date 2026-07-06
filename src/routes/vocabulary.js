@@ -45,6 +45,21 @@ function mapRelatedConcept (row) {
   }
 }
 
+// Groups rows sharing a CONCEPT_ID into a single concept with a nested RELATIONSHIPS array.
+function mapConceptsWithRelationships (rows) {
+  const byId = new Map()
+  for (const row of rows) {
+    if (!byId.has(row.CONCEPT_ID)) {
+      byId.set(row.CONCEPT_ID, { ...mapConcept(row), RELATIONSHIPS: [] })
+    }
+    byId.get(row.CONCEPT_ID).RELATIONSHIPS.push({
+      RELATIONSHIP_NAME: row.RELATIONSHIP_NAME,
+      RELATIONSHIP_DISTANCE: row.RELATIONSHIP_DISTANCE
+    })
+  }
+  return Array.from(byId.values())
+}
+
 // Returns the first configured source (priority vocabulary source).
 function defaultSource () {
   const s = config.sources[0]
@@ -440,6 +455,34 @@ router.get('/concept/:id/descendants', async (req, res, next) => {
     const querySql = renderSql(loadSql('vocabulary/getDescendantConcepts.sql'), source)
     const result = await request.query(querySql)
     res.json(result.recordset.map(mapRelatedConcept))
+  } catch (err) { next(err) }
+})
+
+// GET /:sourceKey/concept/:id/ancestorAndDescendant
+router.get('/:sourceKey/concept/:id/ancestorAndDescendant', async (req, res, next) => {
+  try {
+    const source = getSource(req.params.sourceKey)
+    const id = parseInt(req.params.id, 10)
+    const pool = getPool(req.params.sourceKey)
+    const request = pool.request()
+    request.input('id', sql.Int, id)
+    const querySql = renderSql(loadSql('vocabulary/getAncestorAndDescendantConcepts.sql'), source)
+    const result = await request.query(querySql)
+    res.json(mapConceptsWithRelationships(result.recordset))
+  } catch (err) { next(err) }
+})
+
+// GET /concept/:id/ancestorAndDescendant (default source)
+router.get('/concept/:id/ancestorAndDescendant', async (req, res, next) => {
+  try {
+    const source = defaultSource()
+    const id = parseInt(req.params.id, 10)
+    const pool = getPool(source.sourceKey)
+    const request = pool.request()
+    request.input('id', sql.Int, id)
+    const querySql = renderSql(loadSql('vocabulary/getAncestorAndDescendantConcepts.sql'), source)
+    const result = await request.query(querySql)
+    res.json(mapConceptsWithRelationships(result.recordset))
   } catch (err) { next(err) }
 })
 
