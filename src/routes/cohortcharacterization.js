@@ -9,7 +9,7 @@ const router = makeAnalysisRouter('cc_analysis', (r) => {
   // Extended result-explore endpoint Atlas may request post-generation
   r.get('/generation/:generationId/result/explore/prevalence/:sourceKey/:conceptId/:domainId',
     (_req, res) => res.json([]))
-})
+}, { paginated: true })
 
 // Atlas fetches the full design via /:id/design when opening an analysis for editing.
 // This is safe to register after the factory because /:id only matches single-segment paths.

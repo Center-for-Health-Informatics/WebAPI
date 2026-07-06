@@ -53,14 +53,16 @@ export function versionToDto (row) {
  * configure — optional callback(router) called BEFORE the parameterised routes,
  *             allowing callers to add type-specific static/prefix routes.
  */
-export function makeAnalysisRouter (table, configure) {
+export function makeAnalysisRouter (table, configure, options = {}) {
+  const { paginated = false } = options
   const router = Router()
 
   // --- static routes ---
 
   router.get('/', (_req, res) => {
     const rows = db.prepare(`SELECT * FROM ${table} ORDER BY id DESC`).all()
-    res.json(rows.map(rowToShortDto))
+    const content = rows.map(rowToShortDto)
+    res.json(paginated ? { content } : content)
   })
 
   router.post('/', (req, res) => {
