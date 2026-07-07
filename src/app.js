@@ -14,6 +14,7 @@ import notificationsRouter from './routes/notifications.js'
 import jobRouter from './routes/job.js'
 import irRouter from './routes/ir.js'
 import cohortcharacterizationRouter from './routes/cohortcharacterization.js'
+import featureanalysisRouter from './routes/featureanalysis.js'
 import pathwayRouter from './routes/pathway.js'
 import estimationRouter from './routes/estimation.js'
 import predictionRouter from './routes/prediction.js'
@@ -21,6 +22,13 @@ import tagsRouter from './routes/tags.js'
 import cohortresultsRouter from './routes/cohortresults.js'
 import personRouter from './routes/person.js'
 import sqlrenderRouter from './routes/sqlrender.js'
+import permissionRouter from './routes/permission.js'
+import cacheRouter from './routes/cache.js'
+import toolRouter from './routes/tool.js'
+import cohortsampleRouter from './routes/cohortsample.js'
+import reusableRouter from './routes/reusable.js'
+import featureextractionRouter from './routes/featureextraction.js'
+import evidenceRouter from './routes/evidence.js'
 
 const app = express()
 
@@ -59,12 +67,20 @@ app.use('/notifications', notificationsRouter)
 app.use('/job', jobRouter)
 app.use('/ir', irRouter)
 app.use('/cohort-characterization', cohortcharacterizationRouter)
+app.use('/feature-analysis', featureanalysisRouter)
 app.use('/pathway-analysis', pathwayRouter)
 app.use('/estimation', estimationRouter)
 app.use('/prediction', predictionRouter)
 app.use('/tag', tagsRouter)
 app.use('/cohortresults', cohortresultsRouter)
 app.use('/sqlrender', sqlrenderRouter)
+app.use('/permission', permissionRouter)
+app.use('/cache', cacheRouter)
+app.use('/tool', toolRouter)
+app.use('/cohortsample', cohortsampleRouter)
+app.use('/reusable', reusableRouter)
+app.use('/featureextraction', featureextractionRouter)
+app.use('/evidence', evidenceRouter)
 // Person profile: /:sourceKey/person/:personId — must come after all fixed-prefix routes
 app.use('/:sourceKey/person', personRouter)
 app.use('/', userRouter)

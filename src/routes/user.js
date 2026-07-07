@@ -31,6 +31,22 @@ router.post('/role', (req, res) => {
   res.status(501).json({ message: 'Role management not implemented' })
 })
 
+router.put('/role/:id', (req, res) => {
+  res.status(501).json({ message: 'Role management not implemented' })
+})
+
+router.delete('/role/:id', (req, res) => {
+  res.status(501).json({ message: 'Role management not implemented' })
+})
+
+router.put('/role/:roleId/:relation/:ids', (req, res) => {
+  res.status(501).json({ message: 'Role management not implemented' })
+})
+
+router.delete('/role/:roleId/:relation/:ids', (req, res) => {
+  res.status(501).json({ message: 'Role management not implemented' })
+})
+
 router.get('/role/:id/permissions', (req, res) => res.json([]))
 
 router.get('/role/:id/users', (req, res) => res.json([]))
@@ -38,5 +54,20 @@ router.get('/role/:id/users', (req, res) => res.json([]))
 router.get('/user/:userId/permissions', (req, res) => res.json([]))
 
 router.get('/user/:userId/roles', (req, res) => res.json([]))
+
+// No AD/LDAP directory is configured in this environment, so the user-import
+// wizard has nothing to offer — an empty provider list keeps it from crashing.
+router.get('/user/providers', (req, res) => res.json([]))
+
+router.get('/user/import/job', (req, res) => res.json([]))
+
+router.post('/user/import/job', (req, res) => {
+  res.status(501).json({ message: 'User import not implemented' })
+})
+
+// Impersonation is meaningless here — access control is the proxy's responsibility.
+router.post('/user/runas', (req, res) => {
+  res.status(501).json({ message: 'Run-as not implemented' })
+})
 
 export default router

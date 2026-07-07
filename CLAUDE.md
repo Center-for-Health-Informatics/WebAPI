@@ -95,12 +95,20 @@ Each domain has a file in `src/routes/`. Routes are plain Express routers mounte
 | `/cohortresults` | [src/routes/cohortresults.js](src/routes/cohortresults.js) |
 | `/ir` | [src/routes/ir.js](src/routes/ir.js) |
 | `/cohort-characterization` | [src/routes/cohortcharacterization.js](src/routes/cohortcharacterization.js) |
+| `/feature-analysis` | [src/routes/featureanalysis.js](src/routes/featureanalysis.js) |
 | `/pathway-analysis` | [src/routes/pathway.js](src/routes/pathway.js) |
 | `/estimation` | [src/routes/estimation.js](src/routes/estimation.js) |
 | `/prediction` | [src/routes/prediction.js](src/routes/prediction.js) |
 | `/tag` | [src/routes/tags.js](src/routes/tags.js) |
 | `/job` | [src/routes/job.js](src/routes/job.js) |
 | `/notifications` | [src/routes/notifications.js](src/routes/notifications.js) |
+| `/permission` | [src/routes/permission.js](src/routes/permission.js) |
+| `/cache` | [src/routes/cache.js](src/routes/cache.js) |
+| `/tool` | [src/routes/tool.js](src/routes/tool.js) |
+| `/cohortsample` | [src/routes/cohortsample.js](src/routes/cohortsample.js) |
+| `/reusable` | [src/routes/reusable.js](src/routes/reusable.js) |
+| `/featureextraction` | [src/routes/featureextraction.js](src/routes/featureextraction.js) |
+| `/evidence` | [src/routes/evidence.js](src/routes/evidence.js) |
 | `/:sourceKey/person` | [src/routes/person.js](src/routes/person.js) |
 | `/` | [src/routes/user.js](src/routes/user.js) |
 

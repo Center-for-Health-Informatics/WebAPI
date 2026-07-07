@@ -266,6 +266,7 @@ router.get('/:id/version/:version/expression', async (req, res, next) => {
 router.get('/:id/annotation', (_req, res) => res.json([]))
 router.put('/:id/annotation', (_req, res) => res.json([]))
 router.delete('/:id/annotation/:annotationId', (_req, res) => res.sendStatus(204))
+router.post('/copy-annotations', (_req, res) => res.sendStatus(200))
 
 // --- generation info (stub) ---
 

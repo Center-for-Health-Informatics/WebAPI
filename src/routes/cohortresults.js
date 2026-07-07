@@ -280,6 +280,16 @@ router.get('/:sourceKey/:id/datacompleteness', async (req, res, next) => {
 // GET /:sourceKey/:id/raw/:analysis_group/:analysis_name — raw result pass-through
 router.get('/:sourceKey/:id/raw/:analysisGroup/:analysisName', (_req, res) => res.json([]))
 
+// Healthcare utilization / cost reports — these require pre-computed cost
+// tables that aren't part of the standard OMOP CDM (payer-specific, rarely
+// populated in test sources), so they stub to empty rather than querying.
+router.get('/:sourceKey/:id/healthcareutilization/drugtypes', (_req, res) => res.json([]))
+router.get('/:sourceKey/:id/healthcareutilization/drug/:window', (_req, res) => res.json([]))
+router.get('/:sourceKey/:id/healthcareutilization/drug/:window/:drugConceptId', (_req, res) => res.json([]))
+router.get('/:sourceKey/:id/healthcareutilization/visit/:window/:visitStat', (_req, res) => res.json([]))
+router.get('/:sourceKey/:id/healthcareutilization/exposure/:window', (_req, res) => res.json([]))
+router.get('/:sourceKey/:id/healthcareutilization/periods/:window', (_req, res) => res.json([]))
+
 // GET /:sourceKey/:id — catch-all for unmapped result types
 router.get('/:sourceKey/:id', (_req, res) => res.json([]))
 

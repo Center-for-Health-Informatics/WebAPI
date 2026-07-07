@@ -460,6 +460,9 @@ function versionToDto (row) {
   return {
     id: row.id,
     entityId: row.entity_id,
+    // Atlas's CohortDefinition.updateVersion() builds its PUT url from
+    // version.assetId, not entityId — both must be present.
+    assetId: row.entity_id,
     version: row.version,
     description: row.description || null,
     archived: !!row.is_archived,

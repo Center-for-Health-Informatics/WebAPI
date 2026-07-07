@@ -37,6 +37,18 @@ router.get('/daimon/priority', (req, res) => {
   res.json(result)
 })
 
+// Connection check — reuses the same SourceInfo shape; Atlas reads .sourceId
+// to decide success/failure, so a 404 (no such source) naturally reads as failed.
+router.get('/connection/:key', (req, res, next) => {
+  try {
+    const source = getSource(req.params.key)
+    const idx = config.sources.indexOf(source)
+    res.json(toSourceInfo(source, idx))
+  } catch (err) {
+    next(err)
+  }
+})
+
 // Single source by key
 router.get('/:key', (req, res, next) => {
   try {
