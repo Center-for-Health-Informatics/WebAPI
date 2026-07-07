@@ -4,7 +4,7 @@ import db from '../db.js'
 // Pathway Analysis — /pathway-analysis
 // GET /:id/design is the Atlas entrypoint for editing; returns full DTO same as GET /:id.
 
-const router = makeAnalysisRouter('pathway_analysis')
+const router = makeAnalysisRouter('pathway_analysis', undefined, { paginated: true })
 
 router.get('/:id/design', (req, res) => {
   const row = db.prepare('SELECT * FROM pathway_analysis WHERE id = ?').get(req.params.id)
