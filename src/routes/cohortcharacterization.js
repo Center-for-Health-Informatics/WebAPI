@@ -9,6 +9,8 @@ const router = makeAnalysisRouter('cc_analysis', (r) => {
   // Extended result-explore endpoint Atlas may request post-generation
   r.get('/generation/:generationId/result/explore/prevalence/:sourceKey/:conceptId/:domainId',
     (_req, res) => res.json([]))
+  // POST /check → design diagnostics; return empty warnings ({ warnings: [] } shape required by Atlas warnings.js)
+  r.post('/check', (_req, res) => res.json({ warnings: [] }))
 }, { paginated: true })
 
 // Atlas fetches the full design via /:id/design when opening an analysis for editing.

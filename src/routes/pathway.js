@@ -6,6 +6,9 @@ import db from '../db.js'
 
 const router = makeAnalysisRouter('pathway_analysis', undefined, { paginated: true })
 
+// POST /check → design diagnostics; return empty warnings ({ warnings: [] } shape required by Atlas warnings.js)
+router.post('/check', (_req, res) => res.json({ warnings: [] }))
+
 router.get('/:id/design', (req, res) => {
   const row = db.prepare('SELECT * FROM pathway_analysis WHERE id = ?').get(req.params.id)
   if (!row) return res.status(404).json({ message: 'Not found' })

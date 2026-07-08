@@ -102,13 +102,12 @@ describe('computeIrResult', () => {
   })
 })
 
-// analysisFactory.js registers its own stubbed GET /:id/info (-> []) before
-// ir.js's configure callback runs its route-matching pass in Express's
-// internal order; regression-test that ir.js's real handler is the one
-// actually reached, not the factory's stub.
-describe('GET /ir/:id/info (route-override regression)', () => {
-  test('returns real generation info + summaryList, not the factory\'s [] stub', async () => {
-    const { body: analysis } = await req('POST', '/ir', { name: 'Test IR Analysis', targetIds: [1], outcomeIds: [2] })
+describe('GET /ir/:id/info', () => {
+  test('returns real generation info + summaryList', async () => {
+    const { body: analysis } = await req('POST', '/ir', {
+      name: 'Test IR Analysis',
+      expression: { targetIds: [1], outcomeIds: [2] }
+    })
 
     db.prepare(`
       INSERT INTO ir_generation_info (ir_analysis_id, source_key, status, start_time, execution_duration)
@@ -121,9 +120,65 @@ describe('GET /ir/:id/info (route-override regression)', () => {
 
     const { status, body } = await req('GET', `/ir/${analysis.id}/info`)
     assert.equal(status, 200)
-    assert.equal(body.length, 1, 'factory stub would have returned an empty array')
+    assert.equal(body.length, 1)
     assert.equal(body[0].executionInfo.status, 'COMPLETE')
     assert.equal(body[0].summaryList.length, 1)
     assert.equal(body[0].summaryList[0].totalPersons, 100)
+  })
+})
+
+// Atlas's IRAnalysis.js always round-trips `expression` as a JSON *string*
+// (see its parse() helper: JSON.parse(data.expression), called unconditionally
+// on every GET/POST/PUT/version response). A brand-new analysis never
+// exercises this path (it stays in-memory until saved), which is why a
+// flattened/missing `expression` key only broke on reloading an existing one.
+describe('POST/GET /ir round-trips expression as a JSON string', () => {
+  test('POST response has expression as a string Atlas can JSON.parse', async () => {
+    const { status, body } = await req('POST', '/ir', {
+      name: 'Round-trip test',
+      expression: JSON.stringify({ targetIds: [1], outcomeIds: [2], strata: [] })
+    })
+    assert.equal(status, 201)
+    assert.equal(typeof body.expression, 'string')
+    const parsed = JSON.parse(body.expression)
+    assert.deepEqual(parsed.targetIds, [1])
+    assert.deepEqual(parsed.outcomeIds, [2])
+  })
+
+  test('GET /:id response also has expression as a string', async () => {
+    const { body: created } = await req('POST', '/ir', {
+      name: 'Round-trip test 2',
+      expression: { targetIds: [3], outcomeIds: [4] }
+    })
+    const { status, body } = await req('GET', `/ir/${created.id}`)
+    assert.equal(status, 200)
+    assert.equal(typeof body.expression, 'string')
+    assert.deepEqual(JSON.parse(body.expression).targetIds, [3])
+  })
+
+  test('PUT response has expression as a string', async () => {
+    const { body: created } = await req('POST', '/ir', { name: 'Round-trip test 3', expression: {} })
+    const { status, body } = await req('PUT', `/ir/${created.id}`, {
+      name: 'Round-trip test 3',
+      expression: { targetIds: [9], outcomeIds: [10] }
+    })
+    assert.equal(status, 200)
+    assert.equal(typeof body.expression, 'string')
+    assert.deepEqual(JSON.parse(body.expression).targetIds, [9])
+  })
+
+  test('GET / (list) omits expression — matches Atlas\'s list view, which never reads it', async () => {
+    const { body } = await req('GET', '/ir')
+    assert.ok(Array.isArray(body))
+    assert.ok(body.length > 0)
+    assert.ok(!('expression' in body[0]))
+  })
+})
+
+describe('POST /ir/check', () => {
+  test('returns {warnings: []} — components/checks/warnings.js reads result.warnings.filter(...)', async () => {
+    const { status, body } = await req('POST', '/ir/check', {})
+    assert.equal(status, 200)
+    assert.ok(Array.isArray(body.warnings))
   })
 })

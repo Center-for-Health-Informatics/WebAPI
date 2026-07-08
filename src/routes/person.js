@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { join, dirname } from 'path'
-import { getSource } from '../sources.js'
+import { getSource, getPool } from '../sources.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SQL_DIR = join(__dirname, '../sql/person')
@@ -18,17 +18,39 @@ function renderSql (sql, tableQualifier, extraParams = {}) {
   }, sql)
 }
 
+// mssql returns recordset column names in the exact (lowercase) case written
+// in the SQL, not upper-cased — the DTO builder below must read the rows
+// accordingly.
+export function rowsToProfile (personRow, opRows, recRows) {
+  return {
+    gender: personRow.gender || '',
+    yearOfBirth: personRow.year_of_birth || 0,
+    observationPeriods: opRows.map(r => ({
+      id: r.observation_period_id,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      type: r.observation_period_type
+    })),
+    records: recRows.map(r => ({
+      conceptId: r.concept_id,
+      conceptName: r.concept_name,
+      domain: r.domain,
+      startDate: r.start_date,
+      endDate: r.end_date
+    }))
+  }
+}
+
 // Person profile route is mounted at /:sourceKey/person by app.js.
 // The params injected by Express include :sourceKey from the parent mount.
 const router = Router({ mergeParams: true })
 
 router.get('/:personId', async (req, res, next) => {
   const { sourceKey, personId } = req.params
-  const source = getSource(sourceKey)
-  if (!source) return res.status(404).json({ message: `Source not found: ${sourceKey}` })
 
   try {
-    const pool = source.pool
+    const source = getSource(sourceKey)
+    const pool = getPool(sourceKey)
     const tq = source.cdmSchema
 
     // Person demographics
@@ -45,25 +67,7 @@ router.get('/:personId', async (req, res, next) => {
     const recSql = renderSql(readSql('getRecords.sql'), tq, { personId })
     const recResult = await pool.request().query(recSql)
 
-    const profile = {
-      gender: personRow.GENDER || '',
-      yearOfBirth: personRow.YEAR_OF_BIRTH || 0,
-      observationPeriods: opResult.recordset.map(r => ({
-        id: r.OBSERVATION_PERIOD_ID,
-        startDate: r.START_DATE,
-        endDate: r.END_DATE,
-        type: r.OBSERVATION_PERIOD_TYPE
-      })),
-      records: recResult.recordset.map(r => ({
-        conceptId: r.CONCEPT_ID,
-        conceptName: r.CONCEPT_NAME,
-        domain: r.DOMAIN,
-        startDate: r.START_DATE,
-        endDate: r.END_DATE
-      }))
-    }
-
-    res.json(profile)
+    res.json(rowsToProfile(personRow, opResult.recordset, recResult.recordset))
   } catch (err) {
     next(err)
   }
