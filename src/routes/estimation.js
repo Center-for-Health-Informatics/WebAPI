@@ -5,6 +5,8 @@ import { makeAnalysisRouter } from './analysisFactory.js'
 
 const router = makeAnalysisRouter('estimation', (r) => {
   r.get('/:id/download', (_req, res) => res.sendStatus(501))
+  // POST /check → design diagnostics; return empty warnings ({ warnings: [] } shape required by Atlas warnings.js)
+  r.post('/check', (_req, res) => res.json({ warnings: [] }))
 })
 
 export default router

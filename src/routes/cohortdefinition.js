@@ -285,7 +285,7 @@ router.get('/:id/generate/:sourceKey', async (req, res, next) => {
 
       console.log(`[cohort ${cohortId}@${sourceKey}] Executing...`)
       const execCfg = source.connectionString
-        ? { connectionString: source.connectionString, requestTimeout: 0 }
+        ? { ...mssql.ConnectionPool.parseConnectionString(source.connectionString), requestTimeout: 0 }
         : {
             server: source.server, port: source.port || 1433,
             database: source.database, user: source.username, password: source.password,
