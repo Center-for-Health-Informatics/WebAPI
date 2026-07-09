@@ -3,22 +3,51 @@ import db from '../db.js'
 
 // Tags — /tag
 // Provides CRUD for tags and multi-assign/unassign against the entity_tag junction table.
+//
+// Atlas's Tag Management page treats any tag with no parent as a "group" and
+// any tag with a parent as a member of that group — a child tag's DTO must
+// carry `groups: [<parent DTO>]` (used both to detect group membership and,
+// via `d.groups[0].color`/`.icon`, as a rendering fallback). See
+// atlas/js/pages/configuration/tag-management/tag-management.js.
 
 const router = Router()
 
-function rowToDto (row) {
+function formatDate (ms) {
+  if (!ms) return null
+  return new Date(ms).toISOString()
+}
+
+// DTO without a `groups` lookup — used both as the top-level shape and as
+// the shape nested inside a child tag's `groups[0]`.
+function rowToBaseDto (row) {
   return {
     id: row.id,
     name: row.name,
     type: row.type || 'COMMON',
+    description: row.description || null,
+    color: row.color || null,
+    icon: row.icon || null,
     count: 0,
-    showGroup: false,
-    multiSelection: false,
-    permissionProtected: false,
-    allowCustom: false,
-    mandatory: false,
-    hasWriteAccess: true
+    showGroup: !!row.show_group,
+    multiSelection: !!row.multi_selection,
+    permissionProtected: !!row.protected,
+    allowCustom: !!row.allow_custom,
+    mandatory: !!row.mandatory,
+    hasWriteAccess: true,
+    createdBy: row.created_by || null,
+    createdDate: formatDate(row.created_date)
   }
+}
+
+function rowToDto (row) {
+  const dto = rowToBaseDto(row)
+  if (row.parent_id) {
+    const parentRow = db.prepare('SELECT * FROM tag WHERE id = ?').get(row.parent_id)
+    dto.groups = parentRow ? [rowToBaseDto(parentRow)] : []
+  } else {
+    dto.groups = []
+  }
+  return dto
 }
 
 // GET /search?namePart=... — must be before /:id
@@ -39,13 +68,19 @@ router.get('/', (_req, res) => {
 
 // POST /
 router.post('/', (req, res) => {
-  const { name, type } = req.body
+  const { name, type, description, color, icon, mandatory, showGroup, multiSelection, allowCustom, permissionProtected, groups } = req.body
   if (!name) return res.status(400).json({ message: 'name is required' })
   const user = req.user?.login || 'anonymous'
+  const parentId = groups && groups.length > 0 ? groups[0].id : null
   try {
     const result = db.prepare(
-      'INSERT INTO tag (name, type, created_by) VALUES (?, ?, ?)'
-    ).run(name, type || 'COMMON', user)
+      `INSERT INTO tag (name, type, description, color, icon, mandatory, show_group, multi_selection, allow_custom, protected, parent_id, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      name, type || 'COMMON', description || null, color || null, icon || null,
+      mandatory ? 1 : 0, showGroup ? 1 : 0, multiSelection ? 1 : 0, allowCustom ? 1 : 0, permissionProtected ? 1 : 0,
+      parentId, user
+    )
     const row = db.prepare('SELECT * FROM tag WHERE id = ?').get(result.lastInsertRowid)
     res.status(201).json(rowToDto(row))
   } catch (e) {
@@ -97,9 +132,15 @@ router.get('/:id', (req, res) => {
 
 // PUT /:id
 router.put('/:id', (req, res) => {
-  const { name, type } = req.body
-  const result = db.prepare('UPDATE tag SET name = ?, type = ? WHERE id = ?').run(
-    name || null, type || 'COMMON', req.params.id
+  const { name, type, description, color, icon, mandatory, showGroup, multiSelection, allowCustom, permissionProtected, groups } = req.body
+  const parentId = groups && groups.length > 0 ? groups[0].id : null
+  const result = db.prepare(
+    `UPDATE tag SET name = ?, type = ?, description = ?, color = ?, icon = ?, mandatory = ?, show_group = ?, multi_selection = ?, allow_custom = ?, protected = ?, parent_id = ?
+     WHERE id = ?`
+  ).run(
+    name || null, type || 'COMMON', description || null, color || null, icon || null,
+    mandatory ? 1 : 0, showGroup ? 1 : 0, multiSelection ? 1 : 0, allowCustom ? 1 : 0, permissionProtected ? 1 : 0,
+    parentId, req.params.id
   )
   if (!result.changes) return res.status(404).json({ message: 'Tag not found' })
   const row = db.prepare('SELECT * FROM tag WHERE id = ?').get(req.params.id)
