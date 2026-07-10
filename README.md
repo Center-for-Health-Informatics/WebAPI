@@ -8,15 +8,16 @@ It is Atlas-compatible: the JSON response shapes match the Java WebAPI exactly, 
 
 | Feature | Java WebAPI | WebAPI-node |
 |---|---|---|
-| Runtime | Java 8 / Spring Boot | Node.js LTS |
+| Runtime | Java 8 / Spring Boot | Node.js LTS (+ a JRE, for CIRCE — see below) |
 | App database | PostgreSQL / SQL Server | SQLite |
 | CDM databases | Any OHDSI dialect | SQL Server only |
 | Auth | Shiro (JDBC, LDAP, OAuth, SAML) | External (nginx header) |
 | Source config | Admin UI + database | Environment variable |
-| Cohort generation | CIRCE → SQL | **Not implemented** (returns 501) |
-| Analysis execution | Spring Batch + Arachne | **Not implemented** (returns 501) |
+| Cohort generation | CIRCE → SQL | CIRCE → SQL, via a bundled `circe.jar` CLI (see [CIRCE](#circe) below) |
+| IR / Pathway analysis execution | Spring Batch | Implemented directly against already-generated cohort tables (no Spring Batch/Arachne) |
+| Estimation / Prediction / Cohort Characterization execution | Spring Batch + Arachne | **Not implemented** (returns 501) — needs the Arachne execution engine |
 
-Vocabulary search, concept sets, CDM Results (Achilles), Cohort Results (Heracles), and all CRUD for cohort definitions, IR analyses, cohort characterizations, pathway analyses, estimation, and prediction are fully implemented.
+Vocabulary search, concept sets, CDM Results (Achilles), Cohort Results (Heracles), cohort generation (CIRCE), IR and Pathway analysis execution, and all CRUD for cohort definitions, IR analyses, cohort characterizations, pathway analyses, estimation, and prediction are fully implemented. Estimation, Prediction, and Cohort Characterization *execution* (which requires the Arachne execution engine, a separate distributed platform) is not.
 
 ## Quick Start
 
@@ -36,6 +37,8 @@ docker compose up
 npm install
 DB_PATH=/tmp/webapi.db WEBAPI_SOURCES='[...]' npm run dev
 ```
+
+Cohort generation shells out to a bundled CIRCE CLI jar (`lib/circe.jar`), so a JRE must be on `PATH` (`java -version`). The jar itself is not checked in — build it first with `scripts/build-circe.sh` (see [CIRCE](#circe) below). Without it, `POST /cohortdefinition/sql` and `GET /cohortdefinition/:id/generate/:sourceKey` will fail.
 
 ## Configuration
 
@@ -89,13 +92,25 @@ location /WebAPI/ {
 
 Without a proxy (e.g. in development), every request runs as `anonymous`.
 
+## CIRCE
+
+Cohort definitions are compiled to SQL by [CIRCE](https://github.com/OHDSI/circe-be), the same Java library the original WebAPI uses. Rather than embedding it as a library, this project shells out to a small CLI wrapper jar (`lib/circe.jar`) — see [src/circe.js](src/circe.js): it spawns `java -jar lib/circe.jar`, writes the cohort expression JSON to stdin, and reads generated SQL back from stdout.
+
+The jar is built from the sibling `circe` repo (checked out alongside this one, i.e. `../circe` relative to `webapi/`) via [scripts/build-circe.sh](scripts/build-circe.sh):
+
+```bash
+scripts/build-circe.sh   # requires mvn, or falls back to docker/podman running a maven image
+```
+
+This produces `lib/circe.jar`, which is *not* checked into version control and must be rebuilt whenever the `circe` submodule/checkout changes. The Docker image (see below) builds and bundles it automatically.
+
 ## Docker
 
 ```dockerfile
 FROM node:lts-slim
 ```
 
-The image mounts a single volume at `/data` for the SQLite database. The database schema is created automatically on first startup via numbered migration files.
+The final image installs `default-jre-headless` (needed to run `lib/circe.jar` for cohort generation) and bundles the pre-built jar. The image mounts a single volume at `/data` for the SQLite database. The database schema is created automatically on first startup via numbered migration files.
 
 ```bash
 # Build
@@ -120,12 +135,12 @@ docker run -p 8080:8080 \
 | `GET /user/me` | Current user |
 | `/vocabulary/:sourceKey/…` | Concept search, lookup, descendants, ancestors, domains, vocabularies |
 | `/conceptset/…` | Concept set CRUD + items + expression resolution |
-| `/cohortdefinition/…` | Cohort definition CRUD + generation info |
+| `/cohortdefinition/…` | Cohort definition CRUD + CIRCE-backed SQL generation (`POST /sql`) + execution (`GET /:id/generate/:sourceKey`) + inclusion-rule report |
 | `/cdmresults/:sourceKey/…` | Achilles reports: dashboard, person, datadensity, death, observation period, domain treemaps + drilldowns |
 | `/cohortresults/:sourceKey/…` | Heracles cohort results: dashboard, person, domain treemaps + drilldowns, data completeness |
-| `/ir/…` | Incidence rate analysis CRUD + versioning |
+| `/ir/…` | Incidence rate analysis CRUD + versioning + real execution (`GET /:id/execute/:sourceKey`) and report, computed directly against generated cohorts |
 | `/cohort-characterization/…` | Cohort characterization CRUD + versioning |
-| `/pathway-analysis/…` | Pathway analysis CRUD + versioning |
+| `/pathway-analysis/…` | Pathway analysis CRUD + versioning + real execution (`POST /:id/generation/:sourceKey`), computed directly against generated cohorts |
 | `/estimation/…` | Estimation CRUD + versioning |
 | `/prediction/…` | Prediction CRUD + versioning |
 | `/tag/…` | Tag CRUD + multi-assign/unassign |
@@ -137,10 +152,10 @@ docker run -p 8080:8080 \
 
 | Endpoint | Reason |
 |---|---|
-| `POST /cohortdefinition/sql` | Requires [CIRCE](https://github.com/OHDSI/circe-be) Java library |
-| `GET /cohortdefinition/:id/generate/:sourceKey` | Requires CIRCE |
-| `GET /ir/:id/report/:sourceKey` | Requires pre-generated IR results |
-| `POST /:analysisType/:id/generation/:sourceKey` | Requires Arachne execution engine |
+| `POST /:analysisType/:id/generation/:sourceKey` for `estimation`, `prediction`, `cohort-characterization` | Requires the Arachne execution engine (a separate distributed platform — Central/Datanode/Execution Engine + R packages) |
+| `POST /ir/sql` | IR's per-stratum breakdown is a full CIRCE `CriteriaGroup` expression; not yet wired to CIRCE (execution itself works — see above) |
+
+`ir` and `pathway-analysis` execution deliberately skip both CIRCE and Arachne: target/outcome/event cohorts in those analyses are references to *already-generated* cohorts, so their math is plain SQL against `${resultsSchema}.cohort` — no external engine needed. Estimation, Prediction, and Cohort Characterization execution genuinely need Arachne and are out of scope for a single local instance.
 
 ## Project Structure
 
@@ -154,6 +169,9 @@ src/
 ├── sqlrender.js       — @param substitution into SQL templates
 ├── jobResource.js     — Spring Batch job shape Atlas expects
 ├── conceptSetExpression.js — JS port of CIRCE concept set SQL builder
+├── circe.js           — spawns lib/circe.jar to compile cohort expressions to SQL
+├── ir-generation.js   — Incidence Rate execution: TAR-clipping + case-counting SQL
+├── pathway-generation.js — Cohort Pathways execution: per-person event-ordering SQL
 ├── middleware/
 │   ├── user.js        — populate req.user from auth header
 │   └── errors.js      — JSON error handler
@@ -166,11 +184,15 @@ src/
     └── person/        — patient profile SQL
 
 migrations/            — numbered SQLite schema files (run on startup)
+scripts/
+└── build-circe.sh      — builds lib/circe.jar from the sibling ../circe repo
+lib/
+└── circe.jar           — CIRCE CLI jar (build artifact, not checked in — see CIRCE section above)
 ```
 
 ## Dependencies
 
-Three runtime packages:
+Three runtime npm packages:
 
 | Package | Purpose |
 |---|---|
@@ -180,11 +202,13 @@ Three runtime packages:
 
 Dev: `nodemon` (hot reload).
 
+Plus one system dependency: a JRE, to run the bundled `lib/circe.jar` for cohort generation (installed automatically in the Docker image; must be present on `PATH` for local development).
+
 ## SQLite Schema
 
 The application database stores all Atlas-managed definitions. The schema is applied automatically from `migrations/` on first startup.
 
-Key tables: `cohort_definition`, `cohort_definition_details`, `concept_set`, `concept_set_item`, `ir_analysis`, `cc_analysis`, `pathway_analysis`, `estimation`, `prediction`, `tag`, `entity_tag`, `version`, `job`, `notifications_viewed`.
+Key tables: `cohort_definition`, `cohort_definition_details`, `concept_set`, `concept_set_item`, `ir_analysis`, `ir_generation_info`, `ir_analysis_result`, `cc_analysis`, `pathway_analysis`, `pathway_generation`, `estimation`, `prediction`, `tag`, `entity_tag`, `version`, `job`, `notifications_viewed`.
 
 The database file persists across container restarts via the `/data` volume mount. To reset all application state, delete the `.db` file — it will be recreated on next startup.
 

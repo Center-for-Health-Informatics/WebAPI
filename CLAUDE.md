@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 OHDSI WebAPI is a Node.js drop-in replacement for the original Java OHDSI WebAPI. It exposes the same REST API consumed by Atlas, runs at `http://localhost:8080`, and connects to one or more CDM (SQL Server) databases plus a local SQLite application database.
 
+Cohort generation is backed by a real CIRCE integration (a bundled CLI jar, not a stub) — see "CIRCE (cohort generation)" below. IR and Pathway analysis execution are also real, computed directly in SQL against already-generated cohorts. Estimation, Prediction, and Cohort Characterization *execution* remain unimplemented (501) — they need the Arachne execution engine, a separate distributed platform out of scope for a single local instance.
+
 ## Build & Run
 
 ### Local development
@@ -36,6 +38,12 @@ Configure CDM sources via the `WEBAPI_SOURCES` environment variable (JSON array 
 
 The service trusts whatever value the auth header contains — it is designed to sit behind an authenticating proxy. Set `WEBAPI_AUTH_HEADER` to match whatever your proxy injects.
 
+### CIRCE (cohort generation)
+
+Cohort definitions are compiled to SQL by shelling out to `lib/circe.jar`, a small CLI wrapper around the real [CIRCE](https://github.com/OHDSI/circe-be) Java library ([src/circe.js](src/circe.js) spawns `java -jar lib/circe.jar`, passing the cohort expression JSON over stdin and reading generated SQL from stdout). This requires a JRE on `PATH`.
+
+The jar is built from the sibling `circe` checkout (`../circe` relative to this repo) via `scripts/build-circe.sh` (uses `mvn` if available, otherwise `docker`/`podman` running a Maven image). `lib/circe.jar` is a build artifact, not checked into version control — rebuild it after any change to the `../circe` checkout. The Docker image builds and bundles it automatically, and installs `default-jre-headless` to run it at container runtime.
+
 ## Testing
 
 ```bash
@@ -62,6 +70,9 @@ No test files exist yet. New tests belong alongside the code they cover or in a 
 | [src/db.js](src/db.js) | Opens SQLite, runs pending migrations from `migrations/` |
 | [src/sources.js](src/sources.js) | Opens mssql pools for each `WEBAPI_SOURCES` entry |
 | [src/app.js](src/app.js) | Express app — CORS, user middleware, route mounting |
+| [src/circe.js](src/circe.js) | Spawns `lib/circe.jar` to compile cohort expressions to SQL — used by `routes/cohortdefinition.js` |
+| [src/ir-generation.js](src/ir-generation.js) | Incidence Rate execution: TAR-clipping + case-counting SQL against generated cohorts — used by `routes/ir.js` |
+| [src/pathway-generation.js](src/pathway-generation.js) | Cohort Pathways execution: per-person event-ordering against generated cohorts — used by `routes/pathway.js` |
 
 ### Database tiers
 

@@ -144,7 +144,6 @@ SQL queries produce lowercase column names (`analysis_id`, `count_value`); code 
 
 ## Known Remaining Gaps
 
-- `GET /cohortdefinition/:id/report/:sourceKey` — returns 501. Needs `generateStats=true` in CIRCE plus additional Achilles tables.
 - `isDemographic` missing from generation info.
 - Dialect translation in `/sqlrender/translate` is a pass-through for non-SQL-Server dialects.
 - Vocabulary search does not include `PERSON_COUNT` / `DESCENDANT_PERSON_COUNT` (our concept count table only has record counts, not person counts from Achilles).
