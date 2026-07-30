@@ -1,7 +1,16 @@
 node_modules/
+
+# SQLite application database (DB_PATH) and its WAL sidecars
 data/
 *.db
+*.db-shm
+*.db-wal
+
 .env
+
 .claude/
-.rob/
-lib/
+
+# Build artifact: lib/circe.jar is produced by scripts/build-circe.sh from the
+# sibling ../circe checkout, not checked in. Scoped to *.jar rather than the
+# whole lib/ directory so real source added there stays visible to git.
+lib/*.jar

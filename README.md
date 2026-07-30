@@ -102,26 +102,35 @@ The jar is built from the sibling `circe` repo (checked out alongside this one, 
 scripts/build-circe.sh   # requires mvn, or falls back to docker/podman running a maven image
 ```
 
-This produces `lib/circe.jar`, which is *not* checked into version control and must be rebuilt whenever the `circe` submodule/checkout changes. The Docker image (see below) builds and bundles it automatically.
+This produces `lib/circe.jar`, which is *not* checked into version control and must be rebuilt whenever the `circe` submodule/checkout changes. The Docker image copies the pre-built jar in, so run `scripts/build-circe.sh` before building the image — otherwise the build fails on the missing file.
 
 ## Docker
 
-```dockerfile
-FROM node:lts-slim
-```
+The image installs `default-jre-headless` (needed to run `lib/circe.jar` for cohort generation) and bundles the pre-built jar. It mounts a single volume at `/data` for the SQLite database. The database schema is created automatically on first startup via numbered migration files.
 
-The final image installs `default-jre-headless` (needed to run `lib/circe.jar` for cohort generation) and bundles the pre-built jar. The image mounts a single volume at `/data` for the SQLite database. The database schema is created automatically on first startup via numbered migration files.
+### Building
+
+`build.sh` produces a multi-arch (`linux/amd64` + `linux/arm64`) image with podman, so a build on an Apple Silicon machine runs on the AMD64 deployment hosts. It tags three names — the `package.json` version, that version plus the short git SHA, and `latest` — and pushes only when asked:
 
 ```bash
-# Build
-docker build -t webapi-node .
+./build.sh            # build only; nothing leaves this machine
+PUSH=1 ./build.sh     # build and push to chi-tools.uc.edu
+```
 
-# Run
-docker run -p 8080:8080 \
+Pushing needs a one-time `podman login chi-tools.uc.edu`. Pushes from a dirty working tree are refused (override with `FORCE=1`). Overrides: `REGISTRY`, `PLATFORMS`.
+
+Because `better-sqlite3` is a native module, `node_modules` must be installed per target architecture, so the `linux/amd64` leg runs under QEMU emulation on Apple Silicon and is noticeably slower than the arm64 leg. `PLATFORMS=linux/arm64 ./build.sh` skips it for a quick local build. (Atlas can avoid emulation entirely; this image can't.)
+
+### Running
+
+```bash
+podman run -p 8080:80 \
   -v $(pwd)/data:/data \
   -e WEBAPI_SOURCES='[{"sourceKey":"cdm",...}]' \
-  webapi-node
+  chi-tools.uc.edu/webapi:latest
 ```
+
+For deployment, [`deploy/compose.yaml`](deploy/compose.yaml) pulls from the registry instead of building locally — copy it, plus `.env`, to `/srv/webapi` on the target host. The repo-root `compose.yaml` still uses `build: .` for local development.
 
 ## API Coverage
 

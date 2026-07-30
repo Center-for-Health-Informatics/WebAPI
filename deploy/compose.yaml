@@ -1,0 +1,34 @@
+# Deployment compose file for chi-cetus (/srv/webapi/compose.yaml).
+#
+# Unlike the repo-root compose.yaml (which uses `build: .` for local
+# development), this pulls a pre-built multi-arch image from the CHI registry.
+# The host needs a one-time `docker login chi-tools.uc.edu`.
+#
+# Copy this file and the repo's .env.example (as .env) to /srv/webapi, then:
+#
+#   docker compose up -d
+#
+# To pin a release instead of tracking latest, replace the image tag with an
+# immutable one (e.g. chi-tools.uc.edu/webapi:1.10.0-gab12cd3) and drop
+# pull_policy.
+
+services:
+  webapi:
+    image: chi-tools.uc.edu/webapi:latest
+    # Required with a mutable `latest` tag: without it, `docker compose up -d`
+    # reuses the locally cached image and silently deploys nothing new.
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT}:${EXPRESS_PORT}"
+    environment:
+      DB_PATH: ${DB_PATH}
+      EXPRESS_PORT: ${EXPRESS_PORT}
+      EXPRESS_HOST: ${EXPRESS_HOST}
+      WEBAPI_AUTH_HEADER: ${WEBAPI_AUTH_HEADER}
+      WEBAPI_SOURCES: ${WEBAPI_SOURCES}
+      WEBAPI_VERSION: ${WEBAPI_VERSION}
+    volumes:
+      # Holds the SQLite application database at $DB_PATH -- must persist
+      # across image updates.
+      - ./data:/data
