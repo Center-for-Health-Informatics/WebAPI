@@ -1,0 +1,7 @@
+{
+  "name": "assertion-smoke",
+  "private": true,
+  "type": "module",
+  "description": "Local stand-in signer for testing the assertion provider; never deploy",
+  "dependencies": { "jose": "^6.2.15" }
+}
