@@ -1,2 +1,19 @@
 # Accepted Trivy findings for the CHI WebAPI image. One CVE id per line, each
-# with a comment saying why it is accepted and when to revisit it.
+# with a comment saying why it is accepted. `exp:` makes the entry lapse so the
+# gate fails again and forces a fresh look.
+
+# spring-webmvc 6.2.19: fixed only in Spring Framework 7.0.9 (no OSS 6.2.x fix;
+# moving needs Spring Boot 4). Neither is reachable in WebAPI:
+#   XsltView RCE/SSRF - WebAPI registers no XsltView or any ViewResolver.
+#   SSE view-fragment stream corruption - WebAPI has no SSE or view fragments.
+CVE-2026-47884 exp:2027-02-01
+CVE-2026-47890 exp:2027-02-01
+
+# mssql-jdbc: false positive. The jar is 12.10.2.jre11, which Trivy itself
+# lists as a fixed version; it misreads the version as plain 12.10.2.
+CVE-2025-59250 exp:2027-02-01
+
+# apt / libapt-pkg in the eclipse-temurin:21-jre base: no rebuilt base image
+# yet. apt is never run in this image (no RUN steps; non-root at runtime).
+# Refresh the base digest in Dockerfile.chi when Temurin publishes a fix.
+CVE-2026-109518 exp:2026-12-15
