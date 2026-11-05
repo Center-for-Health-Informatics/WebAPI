@@ -1,0 +1,7 @@
+{
+  "api": { "url": "/WebAPI" },
+  "userAuthenticationEnabled": true,
+  "enableSkipLogin": false,
+  "enablePermissionManagement": true,
+  "authProviders": []
+}
