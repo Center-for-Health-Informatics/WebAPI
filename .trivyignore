@@ -1,0 +1,2 @@
+# Accepted Trivy findings for the CHI WebAPI image. One CVE id per line, each
+# with a comment saying why it is accepted and when to revisit it.

@@ -29,3 +29,4 @@ logs
 **/resources/config/application*-dev-*.yml
 /.vscode
 /.run
+/build

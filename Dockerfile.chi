@@ -1,0 +1,63 @@
+# CHI build of OHDSI WebAPI.
+#
+# Differs from the upstream Dockerfile in three ways:
+#   - The builder stage runs on the build host's own architecture
+#     (--platform=$BUILDPLATFORM). The jar is architecture-independent, so a
+#     multi-arch build compiles once, natively, and Maven never runs under QEMU.
+#   - The runtime stage has no RUN steps, so its non-native legs need no
+#     emulation either.
+#   - No trexsql plugin or OpenTelemetry agent: we use neither, and upstream
+#     downloads them unpinned and amd64-only.
+#
+# Base images are pinned by multi-arch index digest. Refresh them deliberately.
+#
+# Configuration is not baked in. Mount a directory of Spring config files at
+# /etc/webapi/ (for example application-chi.yaml with SPRING_PROFILES_ACTIVE=chi).
+
+FROM --platform=$BUILDPLATFORM docker.io/library/maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320 AS builder
+
+WORKDIR /code
+
+ARG GIT_BRANCH=unknown
+ARG GIT_COMMIT_ID_ABBREV=unknown
+
+COPY pom.xml /code/
+COPY src /code/src
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -q package \
+      -DskipTests -DskipUnitTests=true \
+      -Dpackaging.type=jar \
+      -Dgit.branch=${GIT_BRANCH} \
+      -Dgit.commit.id.abbrev=${GIT_COMMIT_ID_ABBREV} \
+ && mkdir -p /code/logs
+
+
+FROM docker.io/library/eclipse-temurin:21-jre@sha256:0b99b3376fbb50dbf9c0af8535fdd5b8eb0d3fdfc8b1e4967f383b6919f6901a
+
+ARG VERSION=unknown
+ARG REVISION=unknown
+ARG CREATED=unknown
+LABEL org.opencontainers.image.title="ohdsi-webapi" \
+      org.opencontainers.image.description="OHDSI WebAPI with the CHI trusted-assertion provider" \
+      org.opencontainers.image.source="https://github.com/Center-for-Health-Informatics/WebAPI" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.created="${CREATED}"
+
+# Extra JVM options (memory, GC, ...). The default avoids blocking on
+# /dev/random in containers.
+ENV JAVA_OPTS="" \
+    DEFAULT_JAVA_OPTS="-Djava.security.egd=file:///dev/./urandom" \
+    SPRING_CONFIG_ADDITIONAL_LOCATION="optional:file:/etc/webapi/"
+
+WORKDIR /var/lib/ohdsi/webapi
+
+COPY --from=builder /code/target/WebAPI.jar .
+# logback writes to ./logs; the runtime user must own it.
+COPY --from=builder --chown=101:101 /code/logs ./logs
+
+EXPOSE 8080
+USER 101
+
+CMD ["sh", "-c", "exec java ${DEFAULT_JAVA_OPTS} ${JAVA_OPTS} --add-opens java.naming/com.sun.jndi.ldap=ALL-UNNAMED -jar WebAPI.jar"]
