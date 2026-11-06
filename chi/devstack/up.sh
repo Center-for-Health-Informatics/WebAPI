@@ -24,7 +24,18 @@ mkdir -p secrets
 [[ -s secrets/postgres-password ]] || openssl rand -hex 24 > secrets/postgres-password
 [[ -s secrets/webapi-jwt-secret ]] || openssl rand -hex 32 > secrets/webapi-jwt-secret
 [[ -s secrets/cacerts ]] || { echo "up.sh: secrets/cacerts missing (JDK trust store + internal CA); see README.md" >&2; exit 1; }
-chmod 600 secrets/postgres-password secrets/webapi-jwt-secret
+[[ -s secrets/jasypt-password ]] || openssl rand -hex 32 > secrets/jasypt-password
+chmod 600 secrets/postgres-password secrets/webapi-jwt-secret secrets/jasypt-password
+
+# Secrets reach WebAPI as files, one per property, read with Spring's
+# configtree import -- not as environment variables, which leak into
+# `inspect` output and child processes. Production does the same.
+mkdir -p secrets/webapi-config && chmod 700 secrets/webapi-config
+cp secrets/postgres-password secrets/webapi-config/datasource.password
+cp secrets/postgres-password secrets/webapi-config/spring.flyway.password
+cp secrets/webapi-jwt-secret secrets/webapi-config/security.jwt.secret
+cp secrets/jasypt-password secrets/webapi-config/jasypt.encryptor.password
+chmod 644 secrets/webapi-config/*   # read by the container's uid 101
 
 running() { container ls | awk 'NR>1{print $1}' | grep -qx "$1"; }
 exists() { container ls -a | awk 'NR>1{print $1}' | grep -qx "$1"; }
@@ -50,18 +61,21 @@ PG=$(ip_of webapi-postgres)
 
 if ! running webapi; then
   exists webapi && container rm webapi >/dev/null
-  # Settings are environment variables (Spring relaxed binding). The two
-  # upstream defaults that matter most are overridden: anonymous access is off
-  # and the JWT secret is random, not the hard-coded sample.
+  # Non-secret settings are environment variables (Spring relaxed binding).
+  # The upstream defaults that matter most are overridden: anonymous access is
+  # off, the JWT secret is random rather than the hard-coded sample, and CDM
+  # source passwords are encrypted with AES-256 rather than stored in clear.
   container run -d --name webapi -m 3G \
     -p "0.0.0.0:${WEBAPI_PORT}:8080" \
     -v "$PWD/secrets/cacerts:/etc/webapi-cacerts:ro" \
+    -v "$PWD/secrets/webapi-config:/run/secrets/webapi:ro" \
+    -e SPRING_CONFIG_IMPORT=configtree:/run/secrets/webapi/ \
     -e JAVA_OPTS="-Djavax.net.ssl.trustStore=/etc/webapi-cacerts -Djavax.net.ssl.trustStorePassword=changeit" \
     -e DATASOURCE_URL="jdbc:postgresql://${PG}:5432/webapi" \
-    -e DATASOURCE_USERNAME=postgres -e DATASOURCE_PASSWORD="$(cat secrets/postgres-password)" \
-    -e SPRING_FLYWAY_USER=postgres -e SPRING_FLYWAY_PASSWORD="$(cat secrets/postgres-password)" \
+    -e DATASOURCE_USERNAME=postgres -e SPRING_FLYWAY_USER=postgres \
+    -e JASYPT_ENCRYPTOR_ENABLED=true \
+    -e JASYPT_ENCRYPTOR_ALGORITHM=PBEWITHSHA256AND256BITAES-CBC-BC \
     -e SECURITY_ALLOWANONYMOUSACCESS=false \
-    -e SECURITY_JWT_SECRET="$(cat secrets/webapi-jwt-secret)" \
     -e SECURITY_ADMINLOGIN="$ADMIN_LOGIN" \
     -e SECURITY_CORS_ENABLED=false \
     -e SECURITY_AUTH_ASSERTION_ENABLED=true \
