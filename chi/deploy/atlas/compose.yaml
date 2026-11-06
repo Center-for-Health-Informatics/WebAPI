@@ -1,0 +1,22 @@
+# Atlas3 on chi-cetus (/srv/atlas3/compose.yaml): static files for
+# chi-hermes's /atlas/ location. Built and pushed by chi/atlas/build.sh; the
+# host only pulls (one-time `docker login chi-tools.uc.edu`).
+#
+#   docker compose up -d
+
+name: atlas3
+
+services:
+  atlas:
+    # Pin an immutable tag; upgrades are an edit to this line.
+    image: chi-tools.uc.edu/atlas3:3.0.1-chi.1
+    restart: unless-stopped
+    ports:
+      # chi-hermes is the only client: bind to the address it connects to and
+      # firewall the port to chi-hermes.
+      - "${BIND_ADDRESS:?set BIND_ADDRESS in .env}:${ATLAS_PORT:?set ATLAS_PORT in .env}:80"
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run, /tmp]
+    logging:
+      driver: json-file
+      options: { max-size: 20m, max-file: "5" }

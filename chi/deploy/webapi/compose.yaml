@@ -1,0 +1,75 @@
+# OHDSI WebAPI 3 on chi-escher, the UC Health container host
+# (/srv/ohdsi-webapi/compose.yaml).
+#
+# Request path: browser -> chi-hermes nginx (UC; CHI auth) -> https ->
+# asclepius.uchealth.com nginx (aquarius) -> plain http -> this WebAPI on
+# :8080. Only aquarius may reach the port (chi/deploy/README.md). Postgres is on an
+# internal network with no route out and no published port.
+#
+# Nothing is built here: the WebAPI image comes from chi-tools.uc.edu (one-time
+# `docker login chi-tools.uc.edu`), Postgres from Docker Hub, both pinned.
+# See chi/deploy/README.md for first-time setup.
+
+name: ohdsi-webapi
+
+services:
+  postgres:
+    # postgres:17 (17.11), multi-arch index digest
+    image: docker.io/library/postgres:17@sha256:748a18a54d3842d43bc156f0840d78029b8d349e0feca98c12b9c4ce3404a6b3
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: webapi
+      POSTGRES_USER: webapi
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets:
+      - postgres-password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-qU", "webapi", "-d", "webapi"]
+      interval: 10s
+      retries: 12
+    logging: &logging
+      driver: json-file
+      options: { max-size: 20m, max-file: "5" }
+
+  webapi:
+    # Pin an immutable tag; upgrades are an edit to this line.
+    image: chi-tools.uc.edu/ohdsi-webapi:3.0.0-chi.1
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    # Non-secret settings. Secrets are files (below), read through Spring's
+    # configtree import, so they never appear in `docker inspect`.
+    env_file: webapi.env
+    secrets:
+      # target = property name: /run/secrets/webapi/<spring.property>
+      - { source: postgres-password, target: /run/secrets/webapi/datasource.password }
+      - { source: postgres-password, target: /run/secrets/webapi/spring.flyway.password }
+      - { source: jwt-secret, target: /run/secrets/webapi/security.jwt.secret }
+      - { source: jasypt-password, target: /run/secrets/webapi/jasypt.encryptor.password }
+    ports:
+      # Bind to the address aquarius connects to, and firewall the port to
+      # aquarius alone (chi/deploy/README.md).
+      - "${BIND_ADDRESS:?set BIND_ADDRESS in .env}:8080:8080"
+    # backend: Postgres. egress: the CDM SQL Server and the CHI auth JWKS.
+    networks: [backend, egress]
+    mem_limit: 4g
+    logging: *logging
+
+secrets:
+  # Created by init-secrets.sh: directory 0700 root, files 0444 so the
+  # containers' non-root users (postgres 999, webapi 101) can read them.
+  postgres-password: { file: ./secrets/postgres-password }
+  jwt-secret: { file: ./secrets/jwt-secret }
+  jasypt-password: { file: ./secrets/jasypt-password }
+
+volumes:
+  pgdata:
+
+networks:
+  backend:
+    internal: true
+  egress: {}

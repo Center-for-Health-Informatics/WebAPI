@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "plugins": [],
+  "settings": {
+    "enableHotReload": false,
+    "loadTimeout": 30000,
+    "pluginsPath": "plugins",
+    "showLoadingIndicators": true,
+    "navigation": {
+      "enabledCoreItems": [
+        "datasources",
+        "concepts",
+        "cohorts",
+        "analysis",
+        "characterizations",
+        "featureAnalyses",
+        "pathways"
+      ]
+    },
+    "theme": {
+      "primaryColor": "#1f425a"
+    }
+  }
+}

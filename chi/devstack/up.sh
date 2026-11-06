@@ -14,6 +14,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 IMAGE=${IMAGE:-chi-tools.uc.edu/ohdsi-webapi:3.0.0-chi.1}
+# The production Atlas3 image (chi/atlas/build.sh). Set ATLAS_IMAGE= (empty) to
+# serve ATLAS_DIST, a local Atlas3 build, instead.
+ATLAS_IMAGE=${ATLAS_IMAGE-chi-tools.uc.edu/atlas3:3.0.1-chi.1}
 ATLAS_DIST=${ATLAS_DIST:-$HOME/Projects/Atlas3/dist}
 VHOST=${VHOST:-dev.lastchance.pub}
 ADMIN_LOGIN=${ADMIN_LOGIN:-iretonrt}
@@ -89,15 +92,20 @@ fi
 
 if ! running atlas3; then
   exists atlas3 && container rm atlas3 >/dev/null
-  # container can't mount a file inside a directory mount, so serve a copy of
-  # the build with our config in it. Rerun up.sh after rebuilding Atlas3.
-  rm -rf secrets/atlas-www && mkdir -p secrets/atlas-www
-  cp -R "${ATLAS_DIST}/" secrets/atlas-www/atlas
-  cp atlas-config-local.json secrets/atlas-www/atlas/config-local.json
-  container run -d --name atlas3 \
-    -p "0.0.0.0:${ATLAS_PORT}:80" \
-    -v "$PWD/secrets/atlas-www:/usr/share/nginx/html:ro" \
-    docker.io/library/nginx:1.30-alpine >/dev/null
+  if [[ -n "$ATLAS_IMAGE" ]]; then
+    container run -d --name atlas3 -p "0.0.0.0:${ATLAS_PORT}:80" "$ATLAS_IMAGE" >/dev/null
+  else
+    # container can't mount a file inside a directory mount, so serve a copy of
+    # the build with our config in it. Rerun up.sh after rebuilding Atlas3.
+    rm -rf secrets/atlas-www && mkdir -p secrets/atlas-www
+    cp -R "${ATLAS_DIST}/" secrets/atlas-www/atlas
+    cp ../atlas/config-local.json secrets/atlas-www/atlas/config-local.json
+    cp ../atlas/plugins.json secrets/atlas-www/atlas/config/plugins.json
+    container run -d --name atlas3 \
+      -p "0.0.0.0:${ATLAS_PORT}:80" \
+      -v "$PWD/secrets/atlas-www:/usr/share/nginx/html:ro" \
+      docker.io/library/nginx:1.30-alpine >/dev/null
+  fi
 fi
 
 echo "waiting for WebAPI..."
