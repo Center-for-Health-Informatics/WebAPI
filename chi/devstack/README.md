@@ -32,7 +32,7 @@ cd ~/Projects/assets && container run -d --name chi-assets -p 0.0.0.0:2063:80 \
 chi/devstack/up.sh
 ```
 
-`up.sh` generates the Postgres password and WebAPI JWT secret into `secrets/`
+`up.sh` generates the Postgres password, WebAPI JWT secret and jasypt key into `secrets/`
 (git-ignored) on first run. It also needs `secrets/cacerts`, a copy of JDK 21's
 `cacerts` with the lastchance.pub internal root and intermediate CAs imported,
 so WebAPI can fetch the JWKS over https through rubeus:
