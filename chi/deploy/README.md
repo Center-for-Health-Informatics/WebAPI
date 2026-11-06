@@ -130,10 +130,23 @@ it if the SQL Server certificate chains to a CA the JVM trusts.)
 
 ### 8. Achilles (data source reports)
 
-Run [Center-for-Health-Informatics/Achilles](https://github.com/Center-for-Health-Informatics/Achilles)
-with results schema `webapi_results`, as a user that can write there. It
-encrypts the connection by default; add `--trust-server-certificate` to match
-the setting above.
+[Center-for-Health-Informatics/Achilles](https://github.com/Center-for-Health-Informatics/Achilles)
+fills `webapi_results.achilles_*`. Run it anywhere at UC Health that can reach
+chi-resdbstg, as the WebAPI user (its grants are enough). It encrypts the
+connection and validates the certificate by default;
+`ACHILLES_TRUST_SERVER_CERTIFICATE=1` matches the source setting above.
+
+```sh
+read -rs ACHILLES_PASSWORD && export ACHILLES_PASSWORD
+docker run --rm -e ACHILLES_PASSWORD \
+  -e ACHILLES_SERVER=chi-resdbstg.healthall.com -e ACHILLES_DATABASE=OMOP_CDM_2026 \
+  -e ACHILLES_CDM_SCHEMA=dbo -e ACHILLES_RESULTS_SCHEMA=webapi_results \
+  -e ACHILLES_USERNAME=<WebAPI user> -e ACHILLES_TRUST_SERVER_CERTIFICATE=1 \
+  chi-tools.uc.edu/achilles:1.2.0
+```
+
+Re-run it after each CDM refresh. It replaces the `achilles_*` tables, so
+the Data Sources reports are briefly empty while it runs.
 
 ### 9. Verify
 
