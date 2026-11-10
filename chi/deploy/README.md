@@ -142,11 +142,17 @@ docker run --rm -e ACHILLES_PASSWORD \
   -e ACHILLES_SERVER=chi-resdbstg.healthall.com -e ACHILLES_DATABASE=OMOP_CDM_2026 \
   -e ACHILLES_CDM_SCHEMA=dbo -e ACHILLES_RESULTS_SCHEMA=webapi_results \
   -e ACHILLES_USERNAME=<WebAPI user> -e ACHILLES_TRUST_SERVER_CERTIFICATE=1 \
-  chi-tools.uc.edu/achilles:1.2.0
+  chi-tools.uc.edu/achilles:1.2.1
 ```
 
-Re-run it after each CDM refresh. It replaces the `achilles_*` tables, so
-the Data Sources reports are briefly empty while it runs.
+Re-run it after each CDM refresh. A full run replaces the `achilles_*`
+tables, so the Data Sources reports are briefly empty while it runs. On
+OMOP_CDM_2026 the heaviest analyses (measurement, drug exposure) take well
+over 5 minutes; 1.2.1 has no query timeout by default.
+
+If analyses fail, the run ends by printing their IDs. Rerun just those by
+adding `-e ACHILLES_ANALYSES=<ids>` to the same command: a run limited that
+way replaces only those analyses and keeps the other analyses' results.
 
 ### 9. Verify
 
