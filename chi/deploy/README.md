@@ -24,7 +24,8 @@ Images are built and pushed from the build machine (`../../build.sh`,
 chi-tools.uc.edu`. Images are pinned by tag (ours) or digest (third-party).
 
 **Placeholders** to fill in: `BIND_ADDRESS` (each host's `.env`),
-`ATLAS_PORT`, `CHI_CETUS_ATLAS_PORT`, `CHI_HERMES_ADDRESS`, `CHI_ESCHER_HOST`.
+`ATLAS_PORT`, `CHI_CETUS_ADDRESS`, `CHI_CETUS_ATLAS_PORT`, `CHI_CETUS_DQD_PORT`,
+`CHI_HERMES_ADDRESS`, `CHI_ESCHER_HOST`.
 
 ## Security decisions
 
@@ -108,8 +109,11 @@ sudo docker compose pull && sudo docker compose up -d
 
 Replace the Node WebAPI / old Atlas locations with
 [hermes/ohdsi.conf](hermes/ohdsi.conf), fill in the placeholders, `nginx -t`,
-reload. Make sure CHI auth lists `/atlas/` and `/WebAPI/` as a protected
-resource (with `ALLOW_UNLISTED`, unlisted paths are served without sign-in).
+reload. Make sure CHI auth
+lists `/atlas/`, `/WebAPI/` and `/dqd/` as protected resources, spelled with
+that exact case: URI roots match case-sensitively, and with `ALLOW_UNLISTED`
+(the default) an unmatched path is served without sign-in. The first check in
+step 9 catches a mismatch.
 Rollback is restoring the previous snippet.
 
 ### 7. Data source (in Atlas, as iretonrt)
