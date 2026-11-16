@@ -11,7 +11,7 @@ runs nothing but nginx.
 | assets | `~/Projects/assets/htdocs` in `nginx:1.30-alpine` | 2063 |
 | WebAPI 3 | `chi-tools.uc.edu/ohdsi-webapi:3.0.0-chi.1` | 28080 |
 | Postgres 17 | volume `webapi-pgdata` | (container network only) |
-| Atlas3 | `~/Projects/Atlas3/dist` in `nginx:1.30-alpine` | 28527 |
+| Atlas3 | `chi-tools.uc.edu/atlas3` image, or `~/Projects/atlas/dist` in `nginx:1.30-alpine` | 28527 |
 
 ## Starting
 
@@ -28,7 +28,8 @@ cd ~/Projects/assets && container run -d --name chi-assets -p 0.0.0.0:2063:80 \
   -v "$PWD/htdocs:/usr/share/nginx/html:ro" \
   -v "$PWD/nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:1.30-alpine
 
-# WebAPI, Postgres, Atlas3 (after `npm run build` in ~/Projects/Atlas3)
+# WebAPI, Postgres, Atlas3 (ATLAS_IMAGE= to serve `npm run build` output
+# from ~/Projects/atlas instead of the image)
 chi/devstack/up.sh
 ```
 

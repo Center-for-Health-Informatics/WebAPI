@@ -16,11 +16,12 @@ browser ── https ──► chi-hermes nginx (UC; CHI auth, auth_request)
 |---|---|---|
 | [webapi/](webapi/) | chi-escher `/srv/ohdsi-webapi` | WebAPI + Postgres compose, settings, secrets script, SQL |
 | [asclepius/](asclepius/) | aquarius nginx | `/WebAPI/` → chi-escher |
-| [atlas/](atlas/) | chi-cetus `/srv/atlas3` | Atlas3 compose |
+| [Atlas3 fork `chi/deploy/`](https://github.com/Center-for-Health-Informatics/Atlas3/tree/chi/3.0.x/chi/deploy) | chi-cetus `/srv/atlas3` | Atlas3 compose |
 | [hermes/](hermes/) | chi-hermes nginx | `/atlas/` → chi-cetus, `/WebAPI/` → asclepius |
 
-Images are built and pushed from the build machine (`../../build.sh`,
-`../atlas/build.sh`); servers only pull, and need only `docker login
+Images are built and pushed from the build machine (`../../build.sh` here,
+`chi/build.sh` in the [CHI Atlas3 fork](https://github.com/Center-for-Health-Informatics/Atlas3/tree/chi/3.0.x/chi), branch `chi/3.0.x`);
+servers only pull, and need only `docker login
 chi-tools.uc.edu`. Images are pinned by tag (ours) or digest (third-party).
 
 **Placeholders** to fill in: `BIND_ADDRESS` (each host's `.env`),
@@ -55,8 +56,9 @@ chi-tools.uc.edu`. Images are pinned by tag (ours) or digest (third-party).
 ### 1. Images (build machine)
 
 `chi-tools.uc.edu/ohdsi-webapi:3.0.0-chi.1` is already pushed. Build and push
-Atlas3: `PUSH=1 chi/atlas/build.sh` (bump `chi/atlas/CHI_VERSION` and the tag
-in `atlas/compose.yaml` for later releases).
+Atlas3: `PUSH=1 chi/build.sh` in `~/Projects/atlas` on `chi/3.0.x` (bump
+`chi/CHI_VERSION` and the tag in its `chi/deploy/compose.yaml` for later
+releases).
 
 ### 2. SQL Server (DBA, or someone with db_owner on OMOP_CDM_2026)
 
@@ -99,7 +101,7 @@ asclepius https server block, fill in the placeholders, `nginx -t`, reload.
 ### 5. chi-cetus (Atlas3)
 
 ```sh
-sudo mkdir -p /srv/atlas3 && cd /srv/atlas3    # copy atlas/compose.yaml
+sudo mkdir -p /srv/atlas3 && cd /srv/atlas3    # copy the Atlas3 fork's chi/deploy/compose.yaml
 printf 'BIND_ADDRESS=<address chi-hermes connects to>\nATLAS_PORT=<port>\n' | sudo tee .env
 sudo iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport <port> --ctdir ORIGINAL ! -s <chi-hermes address> -j DROP
 sudo docker compose pull && sudo docker compose up -d

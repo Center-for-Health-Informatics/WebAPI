@@ -14,10 +14,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 IMAGE=${IMAGE:-chi-tools.uc.edu/ohdsi-webapi:3.0.0-chi.1}
-# The production Atlas3 image (chi/atlas/build.sh). Set ATLAS_IMAGE= (empty) to
-# serve ATLAS_DIST, a local Atlas3 build, instead.
+# The production Atlas3 image (chi/build.sh in the CHI Atlas3 fork). Set
+# ATLAS_IMAGE= (empty) to serve a local build from ATLAS_SRC (the fork's
+# chi/3.0.x checkout) instead.
 ATLAS_IMAGE=${ATLAS_IMAGE-chi-tools.uc.edu/atlas3:3.0.1-chi.1}
-ATLAS_DIST=${ATLAS_DIST:-$HOME/Projects/Atlas3/dist}
+ATLAS_SRC=${ATLAS_SRC:-$HOME/Projects/atlas}
+ATLAS_DIST=${ATLAS_DIST:-$ATLAS_SRC/dist}
 VHOST=${VHOST:-dev.lastchance.pub}
 ADMIN_LOGIN=${ADMIN_LOGIN:-iretonrt}
 WEBAPI_PORT=28080
@@ -99,8 +101,8 @@ if ! running atlas3; then
     # the build with our config in it. Rerun up.sh after rebuilding Atlas3.
     rm -rf secrets/atlas-www && mkdir -p secrets/atlas-www
     cp -R "${ATLAS_DIST}/" secrets/atlas-www/atlas
-    cp ../atlas/config-local.json secrets/atlas-www/atlas/config-local.json
-    cp ../atlas/plugins.json secrets/atlas-www/atlas/config/plugins.json
+    cp "${ATLAS_SRC}/chi/config-local.json" secrets/atlas-www/atlas/config-local.json
+    cp "${ATLAS_SRC}/chi/plugins.json" secrets/atlas-www/atlas/config/plugins.json
     container run -d --name atlas3 \
       -p "0.0.0.0:${ATLAS_PORT}:80" \
       -v "$PWD/secrets/atlas-www:/usr/share/nginx/html:ro" \
